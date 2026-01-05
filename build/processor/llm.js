@@ -1,0 +1,361 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const openai_1 = __importDefault(require("openai"));
+const node_crypto_1 = require("node:crypto");
+class ProcessorLLM {
+    constructor() {
+        /* ================================
+           TRANSACTION EXTRACTION
+           ================================ */
+        this.extractAndEnrichTransactions = (input) => __awaiter(this, void 0, void 0, function* () {
+            const prompt = `
+You are a deterministic financial transaction extraction engine for Indian bank and credit card statements.
+
+Your ONLY responsibility is to accurately extract factual transaction data from the provided statement text.
+You must be conservative, precise, and avoid assumptions.
+
+You are provided with:
+1. Explicit ACCOUNT CONTEXT (authoritative)
+2. Raw STATEMENT TEXT for a single page or chunk
+
+You MUST use the provided account context as ground truth.
+You must NOT infer account type or ownership beyond this context.
+
+========================
+ACCOUNT CONTEXT (AUTHORITATIVE)
+========================
+- Account ID: ${input.accountContext.accountId}
+- Account Type: ${input.accountContext.accountType}
+${input.accountContext.bankName ? `- Bank Name: ${input.accountContext.bankName}` : ""}
+${input.accountContext.cardLast4 ? `- Card Last 4 Digits: ${input.accountContext.cardLast4}` : ""}
+
+RULE:
+- If Account Type is "credit_card", all card spends belong to a credit card.
+- If Account Type is "bank", debit card, UPI, IMPS, NEFT, POS are ALL bank transactions.
+- You MUST NOT override this context.
+
+
+========================
+STRICT OUTPUT FORMAT
+========================
+Return ONLY valid JSON in the following exact structure.
+Do NOT include explanations, comments, or extra keys.
+
+{
+  "transactions": [
+    {
+      "transaction_id": "uuid-like string",
+      "date": "YYYY-MM-DD",
+      "amount": number (positive, INR),
+      "direction": "inflow | outflow",
+      "description": "verbatim transaction text",
+      "merchant": "clean merchant name or null",
+      "source": "bank | upi | credit_card",
+      "category": "string or null",
+      "subcategory": "string or null",
+      "is_internal_transfer": boolean,
+      "confidence": number between 0 and 1
+    }
+  ]
+}
+
+========================
+CRITICAL DEFINITIONS
+========================
+
+INTERNAL TRANSFER:
+Money moved BETWEEN TWO ACCOUNTS OWNED BY THE SAME USER.
+Examples: savings → salary, bank → own wallet, self transfer.
+
+NOT INTERNAL TRANSFERS (NEVER mark as internal):
+- Payments to merchants (Zomato, Rapido, Amazon, Blinkit, Swiggy, Apple, etc.)
+- Investments (Groww, Zerodha, mutual funds, stocks, SIPs)
+- Payments to individuals (UPI to a person’s name or phone number)
+- Food, transport, shopping, healthcare, subscriptions, or bills
+- Any transaction where ownership of BOTH sides is not explicitly clear
+
+When in doubt, ALWAYS set is_internal_transfer = false.
+
+========================
+NON-NEGOTIABLE RULES
+========================
+- Parse Indian date formats correctly (DD/MM/YYYY, DD-MM-YYYY)
+- Parse Indian number formats correctly (commas, lakhs)
+- Amount must ALWAYS be positive
+- direction:
+  - inflow = credits, deposits, refunds
+  - outflow = debits, spends, withdrawals
+- source must be ONE of:
+  - "upi"
+  - "bank"
+  - "credit_card"
+- Categorization must be conservative
+- If unsure about category or subcategory, set it to null
+- DO NOT invent transactions
+- DO NOT merge or split transactions
+- DO NOT calculate totals or summaries
+- DO NOT reinterpret transaction meaning
+- DO NOT guess account ownership
+
+CARD SOURCE RULES (IMPORTANT):
+- Debit Card (DC) transactions MUST be classified as source = "bank"
+- Credit Card transactions MUST only be classified as source = "credit_card"
+  when the statement is clearly a credit card statement
+  or explicitly mentions "Credit Card", "CC", or a credit card account.
+- POS or card transactions without explicit credit card context
+  MUST default to source = "bank"
+- Standing Instructions (SI) from debit cards are NOT credit card spends
+
+========================
+CONFIDENCE SCORING
+========================
+Assign a confidence score per transaction:
+- 1.0 = explicitly clear from text
+- 0.7 = strong inference
+- 0.4 = weak inference
+- 0.0 = unclear / ambiguous
+
+========================
+INPUT STATEMENT TEXT
+========================
+${input.pageText}
+`;
+            const res = yield this.client.chat.completions.create({
+                model: "gpt-4.1",
+                temperature: 0,
+                messages: [{ role: "user", content: prompt }],
+                response_format: { type: "json_object" }
+            });
+            const parsed = JSON.parse(res.choices[0].message.content);
+            return parsed.transactions.map((t) => ({
+                transaction_id: (0, node_crypto_1.randomUUID)(),
+                user_id: input.userId,
+                account_id: input.accountId,
+                date: t.date,
+                amount: t.amount,
+                direction: t.direction,
+                description: t.description,
+                merchant: t.merchant,
+                source: t.source,
+                category: t.category,
+                subcategory: t.subcategory,
+                is_internal_transfer: t.is_internal_transfer,
+                currency: "INR",
+                // optional but VERY useful
+                confidence: t.confidence
+            }));
+        });
+        this.detectStatementContext = (input) => __awaiter(this, void 0, void 0, function* () {
+            const prompt = `
+You are a deterministic Indian bank statement classifier.
+
+Your task is to extract ACCOUNT CONTEXT from the FIRST PAGE of a statement.
+
+========================
+WHAT YOU MUST IDENTIFY
+========================
+From the text below, determine:
+
+1. Account Type:
+   - "bank" OR "credit_card"
+
+2. Bank Name:
+   - e.g. HDFC Bank, ICICI Bank, Axis Bank
+   - null if not found
+
+3. Account / Card Last 4 Digits:
+   - Use masked number (XXXX1234 → 1234)
+   - null if not found
+
+4. Account Holder Name (if present)
+
+5. Statement Period (if present)
+
+========================
+STRICT OUTPUT FORMAT
+========================
+Return ONLY valid JSON:
+
+{
+  "accountType": "bank | credit_card",
+  "bankName": string | null,
+  "accountLast4": string | null,
+  "holderName": string | null,
+  "cardLast4": string | null,
+  "statementPeriod": {
+    "start": "YYYY-MM-DD",
+    "end": "YYYY-MM-DD"
+  } | null
+}
+
+========================
+IMPORTANT RULES
+========================
+- If the text mentions "Credit Card Statement", classify as credit_card
+- Debit card usage DOES NOT mean credit card
+- Do NOT guess missing values
+- If unsure, set field to null
+
+========================
+STATEMENT FIRST PAGE TEXT
+========================
+${input.firstPageText}
+`;
+            const res = yield this.client.chat.completions.create({
+                model: "gpt-4.1",
+                temperature: 0,
+                messages: [{ role: "user", content: prompt }],
+                response_format: { type: "json_object" }
+            });
+            const parsed = JSON.parse(res.choices[0].message.content);
+            return parsed;
+        });
+        /* ================================
+           NARRATIVE (READ-ONLY)
+           ================================ */
+        this.generateNarrative = (input) => __awaiter(this, void 0, void 0, function* () {
+            const prompt = `
+      You are a deterministic financial analysis engine for an Indian personal finance application.
+
+      You are given a PRECOMPUTED financial analysis snapshot.
+      Your task is to STRUCTURE and INTERPRET this data into a UI-ready insight report.
+
+      ========================
+      CRITICAL CONSTRAINTS
+      ========================
+      - DO NOT recompute numbers
+      - DO NOT infer missing data
+      - DO NOT introduce new metrics
+      - DO NOT contradict the snapshot
+      - DO NOT return explanations or prose
+      - RETURN ONLY valid JSON
+      - The output MUST EXACTLY match the schema below
+
+      ========================
+      OUTPUT SCHEMA (STRICT)
+      ========================
+      Return JSON in the following exact structure:
+
+      {
+        "summary": string[],
+
+        "monthly_breakdown": [
+          {
+            "month": "MMM YYYY",
+            "income": number,
+            "expenses": number,
+            "savings": number,
+            "savingsRate": number
+          }
+        ],
+
+        "category_breakdown": [
+          {
+            "category": string,
+            "amount": number,
+            "percentage": number,
+            "trend": "up" | "down" | "stable",
+            "count": number
+          }
+        ],
+
+        "patterns": [
+          {
+            "pattern": string,
+            "description": string,
+            "impact": "positive" | "negative" | "neutral"
+          }
+        ],
+
+        "recommendations": [
+          {
+            "title": string,
+            "impact": string,
+            "confidence": "low" | "medium" | "high"
+          }
+        ],
+
+        "goal_alignment_score": number,
+
+        "total_income": number,
+        "total_expenses": number,
+        "net_savings": number,
+
+        "analysis_period": {
+          "start": "YYYY-MM-DD",
+          "end": "YYYY-MM-DD"
+        }
+      }
+
+      ========================
+      HOW TO INTERPRET DATA
+      ========================
+
+      SUMMARY:
+      - Write 4–6 concise, insight-driven points
+      - Each point should reference patterns visible in the data
+      - Use absolute values and percentages already present
+
+      MONTHLY BREAKDOWN:
+      - Use cashflow.months
+      - savings = income - expenses
+      - savingsRate = savings / income * 100
+      - Format month as "MMM YYYY"
+
+      CATEGORY BREAKDOWN:
+      - Use dominant categories only
+      - percentage = percentageOfExpense * 100
+      - trend:
+        - "up" if spending increases over months
+        - "down" if decreasing
+        - "stable" otherwise
+      - count = number of transactions (estimate conservatively if needed)
+
+      PATTERNS:
+      - Detect recurring behavioral patterns
+      - Examples: weekend spending, investment clustering, volatility
+      - Impact should reflect financial health
+
+      RECOMMENDATIONS:
+      - Must be realistic and actionable
+      - Tie directly to observed patterns
+      - Avoid generic advice
+
+      GOAL ALIGNMENT SCORE:
+      - Use healthScore normalized to 0–1
+
+      ANALYSIS PERIOD:
+      - Derive from earliest and latest months in cashflow.months
+
+      ========================
+      INPUT SNAPSHOT (READ-ONLY)
+      ========================
+      ${JSON.stringify(input.snapshot, null, 2)}
+      `;
+            const res = yield this.client.chat.completions.create({
+                model: "gpt-4.1",
+                temperature: 0.25,
+                messages: [{ role: "user", content: prompt }],
+                response_format: { type: "text" }
+            });
+            return res.choices[0].message.content;
+        });
+        this.client = new openai_1.default({
+            apiKey: process.env.OPENAI_API_KEY,
+        });
+    }
+}
+exports.default = ProcessorLLM;
+//# sourceMappingURL=llm.js.map
