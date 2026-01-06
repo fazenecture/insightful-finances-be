@@ -23,4 +23,8 @@ export default class ProcessorController extends ProcessorService {
             customErrorHandler(res, error);
         }
     }
+
+    public fetchAnalysisDataController = async () => {
+        // 
+    }
 }

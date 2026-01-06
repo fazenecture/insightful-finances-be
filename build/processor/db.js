@@ -78,6 +78,9 @@ class ProcessorDB {
             }
         });
         this.insertBulkTransactions = (input) => __awaiter(this, void 0, void 0, function* () {
+            if (input.transactions.length === 0) {
+                return;
+            }
             const query = postgres_1.default.format(`INSERT INTO transactions ?`, input.transactions);
             yield postgres_1.default.query(query);
         });
@@ -113,6 +116,13 @@ class ProcessorDB {
                 ]);
             }
         });
+        this.saveSubscriptions = (subscriptions) => __awaiter(this, void 0, void 0, function* () {
+            if (subscriptions.length === 0) {
+                return;
+            }
+            const query = postgres_1.default.format(`INSERT INTO subscriptions ? ON CONFLICT (id) DO NOTHING`, subscriptions);
+            yield postgres_1.default.query(query);
+        });
         this.saveHealthScore = (input) => __awaiter(this, void 0, void 0, function* () {
             yield postgres_1.default.query(`
       INSERT INTO financial_health_scores (user_id, score)
@@ -125,8 +135,6 @@ class ProcessorDB {
             yield postgres_1.default.query(`
       INSERT INTO financial_narratives (user_id, narrative)
       VALUES ($1,$2)
-      ON CONFLICT (user_id)
-      DO UPDATE SET narrative = EXCLUDED.narrative
       `, [input.userId, input.narrative]);
         });
     }

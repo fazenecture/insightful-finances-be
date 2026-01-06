@@ -66,7 +66,9 @@ Do NOT include explanations, comments, or extra keys.
       "category": "string or null",
       "subcategory": "string or null",
       "is_internal_transfer": boolean,
-      "confidence": number between 0 and 1
+      "confidence": number between 0 and 1,
+      "is_recurring_candidate": boolean,
+      "recurring_signal": "SI | AUTO_DEBIT | MERCHANT_RECURRING | null",
     }
   ]
 }
@@ -87,6 +89,47 @@ NOT INTERNAL TRANSFERS (NEVER mark as internal):
 - Any transaction where ownership of BOTH sides is not explicitly clear
 
 When in doubt, ALWAYS set is_internal_transfer = false.
+
+========================
+RECURRING / SUBSCRIPTION SIGNALS (IMPORTANT)
+========================
+
+Your job is NOT to confirm subscriptions.
+Your job is ONLY to flag possible recurring transactions.
+
+Set:
+- is_recurring_candidate = true
+ONLY if there is EXPLICIT textual evidence.
+
+Allowed signals:
+1. Standing Instructions:
+   - "SI"
+   - "STANDING INSTRUCTION"
+   - "AUTO DEBIT"
+   - "E-MANDATE"
+   - "NACH"
+
+   → recurring_signal = "SI" or "AUTO_DEBIT"
+
+2. Known recurring merchants:
+   - Apple Media Services
+   - Google Play
+   - Netflix
+   - Spotify
+   - Amazon Prime
+   - Microsoft
+   - Adobe
+   - Disney+ Hotstar/JioHotstar
+   - Sonyliv
+   - Medium
+   - LinkedIn
+
+   → recurring_signal = "MERCHANT_RECURRING"
+
+Rules:
+- Investments (Groww, Zerodha, SIP, mutual funds) are NEVER subscriptions
+- One-time purchases from these merchants are still candidates, NOT confirmed
+- If unsure, set is_recurring_candidate = false and recurring_signal = null
 
 ========================
 NON-NEGOTIABLE RULES
@@ -134,6 +177,7 @@ ${input.pageText}
 `;
             const res = yield this.client.chat.completions.create({
                 model: "gpt-4.1",
+                // model: "gpt-4.1",
                 temperature: 0,
                 messages: [{ role: "user", content: prompt }],
                 response_format: { type: "json_object" }
@@ -154,7 +198,9 @@ ${input.pageText}
                 is_internal_transfer: t.is_internal_transfer,
                 currency: "INR",
                 // optional but VERY useful
-                confidence: t.confidence
+                confidence: t.confidence,
+                is_recurring_candidate: t.is_recurring_candidate,
+                recurring_signal: t.recurring_signal,
             }));
         });
         this.detectStatementContext = (input) => __awaiter(this, void 0, void 0, function* () {

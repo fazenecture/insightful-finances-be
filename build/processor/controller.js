@@ -31,6 +31,9 @@ class ProcessorController extends service_1.default {
                 (0, custom_error_1.default)(res, error);
             }
         });
+        this.fetchAnalysisDataController = () => __awaiter(this, void 0, void 0, function* () {
+            // 
+        });
     }
 }
 exports.default = ProcessorController;

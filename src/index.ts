@@ -8,7 +8,26 @@ import baseRouter from "./routes/index.router";
 
 const app: Application = express();
 
-app.use(cors());
+const allowedOrigins = [
+  "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app/"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      // if (!origin) return callback(null, true);
+      // if (allowedOrigins.includes(origin)) {
+      if (true) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 app.set("trust proxy", true);
 app.use(morgan("dev"));

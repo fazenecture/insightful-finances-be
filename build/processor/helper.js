@@ -19,7 +19,9 @@ const db_1 = __importDefault(require("./db"));
 const llm_1 = __importDefault(require("./llm"));
 const analysis_1 = __importDefault(require("./analysis"));
 const s3_1 = __importDefault(require("./s3"));
+const p_limit_1 = __importDefault(require("p-limit"));
 const token_chunker_1 = require("../helper/token.chunker");
+const node_crypto_1 = require("node:crypto");
 class ProcessorHelper extends db_1.default {
     constructor() {
         super();
@@ -28,72 +30,41 @@ class ProcessorHelper extends db_1.default {
            ================================ */
         this.processSinglePdf = (input) => __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c;
-            const { userId, accountId, s3Key } = input;
-            // const localPath = await this.downloadPdf({ s3Key });
-            // const pages = await this.extractPdfPages({ filePath: localPath });
+            const { userId, s3Key } = input;
             const pages = yield this.extractPdfFromUrl({ url: s3Key });
-            // for (const page of pages) {
-            //   const { text: pageText } = page as PageTextResult;
-            //   if (!pageText.trim()) continue;
-            //   console.log('Processing page text: ', pageText.length);
-            //   let txns = await this.llm.extractAndEnrichTransactions({
-            //     userId,
-            //     accountId,
-            //     pageText
-            //   });
-            //   txns = this.detectInternalTransfers({ transactions: txns });
-            //   await this.insertBulkTransactions({ transactions: txns });
-            //   await this.sleep({ ms: 400 }); // TPM safety
-            // }
-            // const PAGE_BATCH_SIZE = 5;
-            // for (let i = 0; i < pages.length; i += PAGE_BATCH_SIZE) {
-            //   const batch = pages.slice(i, i + PAGE_BATCH_SIZE);
-            //   const combinedText = batch
-            //     .map((p) => (p as PageTextResult).text)
-            //     .join("\n\n--- PAGE BREAK ---\n\n");
-            //   if (!combinedText.trim()) continue;
-            //   console.log("Processing batch pages:", i, "-", i + batch.length);
-            //   let txns = await this.llm.extractAndEnrichTransactions({
-            //     userId,
-            //     accountId,
-            //     pageText: combinedText,
-            //   });
-            //   txns = this.detectInternalTransfers({ transactions: txns });
-            //   await this.insertBulkTransactions({ transactions: txns });
-            //   await this.sleep({ ms: 500 }); // one sleep per batch
-            // }
             /**
              * get the context from the first page
              */
+            const limit = (0, p_limit_1.default)(10); // tune: 6–12 is safe
             const context = yield this.llm.detectStatementContext({
                 firstPageText: pages[0].text,
             });
-            const fullText = pages.map((p) => p.text).join("\n\n");
             // 2. Token-based chunking
-            const chunks = (0, token_chunker_1.chunkTextByTokens)({
-                text: fullText,
-                maxTokens: token_chunker_1.MAX_TOKENS_PER_CHUNK,
-            });
+            const pagesWithRows = pages.map((p, idx) => ({
+                pageNumber: idx + 1,
+                rows: this.splitPageIntoRows(p.text),
+            }));
+            const chunks = this.chunkRowsByTokens(pagesWithRows, token_chunker_1.MAX_TOKENS_PER_CHUNK, token_chunker_1.estimateTokens // your tokenizer
+            );
             console.log(`Total chunks: ${chunks.length}`);
             const accountIdData = [
                 (_a = context.bankName) !== null && _a !== void 0 ? _a : "UNKNOWN_BANK",
                 context.accountType,
                 (_c = (_b = context === null || context === void 0 ? void 0 : context.accountLast4) !== null && _b !== void 0 ? _b : context === null || context === void 0 ? void 0 : context.cardLast4) !== null && _c !== void 0 ? _c : "XXXX",
             ].join("-");
-            for (const [index, chunk] of chunks.entries()) {
-                if (!chunk.trim())
-                    continue;
-                console.log(`Processing chunk ${index + 1}/${chunks.length}`);
+            yield Promise.all(chunks.map((chunk, index) => limit(() => __awaiter(this, void 0, void 0, function* () {
+                console.log(`Processing chunk ${index + 1}/${chunks.length} (pages: ${chunk.pages.join(",")})`);
                 let txns = yield this.llm.extractAndEnrichTransactions({
                     userId,
                     accountId: accountIdData,
-                    pageText: chunk,
+                    pageText: chunk.text,
                     accountContext: context,
                 });
                 txns = this.detectInternalTransfers({ transactions: txns });
-                yield this.insertBulkTransactions({ transactions: txns });
-            }
-            // fs.unlinkSync(localPath);
+                if (txns.length) {
+                    yield this.insertBulkTransactions({ transactions: txns });
+                }
+            }))));
         });
         /* ================================
            PDF HELPERS
@@ -108,6 +79,42 @@ class ProcessorHelper extends db_1.default {
             });
             return tmpPath;
         });
+        this.chunkRowsByTokens = (pages, maxTokens, estimateTokens) => {
+            const chunks = [];
+            let currentRows = [];
+            let currentPages = new Set();
+            let currentTokens = 0;
+            for (const page of pages) {
+                for (const row of page.rows) {
+                    const rowTokens = estimateTokens(row);
+                    if (currentTokens + rowTokens > maxTokens) {
+                        chunks.push({
+                            text: currentRows.join("\n"),
+                            pages: Array.from(currentPages),
+                        });
+                        currentRows = [];
+                        currentPages = new Set();
+                        currentTokens = 0;
+                    }
+                    currentRows.push(row);
+                    currentPages.add(page.pageNumber);
+                    currentTokens += rowTokens;
+                }
+            }
+            if (currentRows.length) {
+                chunks.push({
+                    text: currentRows.join("\n"),
+                    pages: Array.from(currentPages),
+                });
+            }
+            return chunks;
+        };
+        this.splitPageIntoRows = (pageText) => {
+            return pageText
+                .split("\n")
+                .map((r) => r.trim())
+                .filter(Boolean);
+        };
         this.parseS3Url = (s3Url) => {
             const url = new URL(s3Url);
             // Example:
@@ -158,6 +165,7 @@ class ProcessorHelper extends db_1.default {
             const credit = this.analysis.computeCreditCardAnalysis({ transactions });
             const income = this.analysis.computeIncomeSourceAnalysis({ transactions });
             const anomalies = this.analysis.detectAnomalies({ transactions });
+            const subscriptions = this.detectSubscriptions({ transactions });
             const healthScore = this.analysis.computeFinancialHealthScore({
                 core,
                 credit,
@@ -170,6 +178,7 @@ class ProcessorHelper extends db_1.default {
                 income,
                 anomalies,
                 healthScore,
+                subscriptions,
             };
         };
         /* ================================
@@ -180,11 +189,92 @@ class ProcessorHelper extends db_1.default {
                 userId: input.userId,
                 months: input.snapshot.cashflow.months,
             });
+            yield this.saveSubscriptions(input.snapshot.subscriptions);
             yield this.saveHealthScore({
                 userId: input.userId,
                 score: input.snapshot.healthScore,
             });
         });
+        this.detectSubscriptions = (input) => {
+            const groups = this.groupByMerchant(input.transactions);
+            const subscriptions = [];
+            for (const [merchant, txns] of groups.entries()) {
+                if (txns.length < 3)
+                    continue;
+                const dates = txns.map((t) => new Date(t.date)).sort((a, b) => +a - +b);
+                const intervals = this.getDayIntervals(dates);
+                const cadence = this.detectCadence(intervals);
+                if (!cadence)
+                    continue;
+                const avgAmount = this.average(txns.map((t) => parseInt(t.amount.toString())));
+                const variance = this.stdDev(txns.map((t) => parseInt(t.amount.toString()))) / avgAmount;
+                if (variance > 0.1)
+                    continue;
+                subscriptions.push({
+                    id: (0, node_crypto_1.randomUUID)(),
+                    merchant,
+                    frequency: cadence,
+                    first_seen: dates[0].toISOString().slice(0, 10),
+                    is_active: (new Date().getTime() - dates.at(-1).getTime()) /
+                        (1000 * 60 * 60 * 24) <
+                        (cadence === "weekly" ? 14 : cadence === "monthly" ? 45 : 400),
+                    average_amount: avgAmount,
+                    occurrences: txns.length,
+                    confidence: cadence === "monthly" ? 0.9 : 0.7,
+                    transactions: txns.map((t) => t.transaction_id),
+                    user_id: txns[0].user_id,
+                    created_at: new Date().toISOString(),
+                });
+            }
+            return subscriptions;
+        };
+        this.stdDev = (values) => {
+            const mean = this.average(values);
+            const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+            return Math.sqrt(variance);
+        };
+        this.groupByMerchant = (transactions) => {
+            var _a;
+            const map = new Map();
+            for (const t of transactions) {
+                if (t.direction !== "outflow")
+                    continue;
+                if (!t.merchant && !t.description)
+                    continue;
+                const key = this.normalizeMerchant((_a = t.merchant) !== null && _a !== void 0 ? _a : t.description);
+                if (!map.has(key)) {
+                    map.set(key, []);
+                }
+                map.get(key).push(t);
+            }
+            return map;
+        };
+        this.normalizeMerchant = (value) => value
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        this.getDayIntervals = (dates) => {
+            const intervals = [];
+            for (let i = 1; i < dates.length; i++) {
+                const diff = (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60 * 60 * 24);
+                intervals.push(Math.round(diff));
+            }
+            return intervals;
+        };
+        this.detectCadence = (intervals) => {
+            if (intervals.length < 2)
+                return null;
+            const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+            if (avg >= 6 && avg <= 8)
+                return "weekly";
+            if (avg >= 28 && avg <= 32)
+                return "monthly";
+            if (avg >= 360 && avg <= 370)
+                return "annual";
+            return null;
+        };
+        this.average = (values) => values.reduce((a, b) => a + b, 0) / values.length;
         this.generateNarrativeSnapshot = (input) => __awaiter(this, void 0, void 0, function* () {
             const narrative = yield this.llm.generateNarrative(input);
             yield this.saveNarrative({

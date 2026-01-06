@@ -52,11 +52,39 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const index_router_1 = __importDefault(require("./routes/index.router"));
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)());
+const allowedOrigins = [
+    "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app/"
+];
+app.use((0, cors_1.default)({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl)
+        // if (!origin) return callback(null, true);
+        // if (allowedOrigins.includes(origin)) {
+        if (true) {
+            return callback(null, true);
+        }
+        else {
+            return callback(new Error("Not allowed by CORS"));
+        }
+    },
+    credentials: true,
+}));
 app.use(express_1.default.json());
 app.set("trust proxy", true);
 app.use((0, morgan_1.default)("dev"));
 app.use("/api", index_router_1.default);
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        uptime: process.uptime(),
+        hrtime: process.hrtime(),
+    });
+});
+app.use("*", (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "NOT_FOUND",
+    });
+});
 const PORT = process.env.PORT || 4000;
 const init = () => __awaiter(void 0, void 0, void 0, function* () {
     app.listen(PORT, () => {

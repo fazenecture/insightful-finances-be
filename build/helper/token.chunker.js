@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MAX_TOKENS_PER_CHUNK = exports.chunkTextByTokens = void 0;
+exports.MAX_TOKENS_PER_CHUNK = exports.estimateTokens = exports.chunkTextByTokens = void 0;
 // utils/tokenChunker.ts
 const tiktoken_1 = require("tiktoken");
 const encoder = (0, tiktoken_1.encoding_for_model)("gpt-4.1");
@@ -21,5 +21,9 @@ const chunkTextByTokens = (input) => {
     return chunks;
 };
 exports.chunkTextByTokens = chunkTextByTokens;
+const estimateTokens = (text) => {
+    return encoder.encode(text).length;
+};
+exports.estimateTokens = estimateTokens;
 exports.MAX_TOKENS_PER_CHUNK = 10000;
 //# sourceMappingURL=token.chunker.js.map
