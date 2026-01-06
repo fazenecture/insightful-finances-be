@@ -76,6 +76,10 @@ export default class ProcessorDB {
     input: { transactions: Transaction[] }
   ): Promise<void> => {
 
+    if (input.transactions.length === 0) {
+      return;
+    }
+
     const query = db.format(
       `INSERT INTO transactions ?`, input.transactions
     );
@@ -131,6 +135,11 @@ export default class ProcessorDB {
   public saveSubscriptions = async (
     subscriptions: IDetectedSubscription[]
   ): Promise<void> => {
+
+    if (subscriptions.length === 0) {
+      return;
+    }
+
     const query = db.format(
       `INSERT INTO subscriptions ? ON CONFLICT (id) DO NOTHING`,
       subscriptions
