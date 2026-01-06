@@ -29,5 +29,8 @@ export const chunkTextByTokens = (input: {
 };
 
 
+export const estimateTokens = (text: string): number => {
+  return encoder.encode(text).length;
+};
 
 export const MAX_TOKENS_PER_CHUNK = 10000;

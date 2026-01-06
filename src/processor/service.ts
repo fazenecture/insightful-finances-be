@@ -17,6 +17,7 @@ export default class ProcessorService extends ProcessorHelper {
 
     const { userId, accountId, pdfKeys } = input;
 
+
     // 1. Process each PDF independently
     for (const s3Key of pdfKeys) {
       await this.processSinglePdf({

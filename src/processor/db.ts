@@ -1,7 +1,7 @@
 // processor/db.ts
 import db from "../config/postgres";
 import ErrorHandler from "../helper/error.handler";
-import { Transaction } from "./types/types";
+import { IDetectedSubscription, Transaction } from "./types/types";
 
 export default class ProcessorDB {
 
@@ -79,7 +79,7 @@ export default class ProcessorDB {
     const query = db.format(
       `INSERT INTO transactions ?`, input.transactions
     );
-    
+
     await db.query(query);
   }
 
@@ -128,6 +128,17 @@ export default class ProcessorDB {
     }
   };
 
+  public saveSubscriptions = async (
+    subscriptions: IDetectedSubscription[]
+  ): Promise<void> => {
+    const query = db.format(
+      `INSERT INTO subscriptions ? ON CONFLICT (id) DO NOTHING`,
+      subscriptions
+    );
+
+    await db.query(query);
+  }
+
   public saveHealthScore = async (
     input: { userId: string; score: number }
   ): Promise<void> => {
@@ -149,8 +160,6 @@ export default class ProcessorDB {
       `
       INSERT INTO financial_narratives (user_id, narrative)
       VALUES ($1,$2)
-      ON CONFLICT (user_id)
-      DO UPDATE SET narrative = EXCLUDED.narrative
       `,
       [input.userId, input.narrative]
     );

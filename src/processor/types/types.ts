@@ -17,7 +17,10 @@ export type Transaction = {
   is_internal_transfer?: boolean;
 
   is_interest?: boolean;
-    is_fee?: boolean;
+  is_fee?: boolean;
+
+  is_recurring_candidate?: boolean;
+  recurring_signal?: "SI" | "AUTO_DEBIT" | "MERCHANT_RECURRING" | null;
 };
 
 export type MonthlyMetrics = {
@@ -28,7 +31,6 @@ export type MonthlyMetrics = {
   savingsRate: number;
   burnRate: number;
 };
-
 
 export type ProcessPdfBatchInput = {
   userId: string;
@@ -58,16 +60,36 @@ export type GenerateNarrativeInput = {
   snapshot: any;
 };
 
-
 export type AccountContext = {
-  accountId: string;              // internal ID you generate
+  accountId: string; // internal ID you generate
   accountType: "bank" | "credit_card";
   bankName: string | null;
-  accountLast4: string | null;    // account or card last 4
+  accountLast4: string | null; // account or card last 4
   holderName?: string | null;
   cardLast4?: string | null;
   statementPeriod?: {
     start: string;
     end: string;
   };
+};
+
+
+export type IDetectedSubscription = {
+  id: string;
+  merchant: string;
+  frequency: "weekly" | "monthly" | "annual";
+  first_seen: string;
+  is_active: boolean;
+  confidence: number;
+  average_amount: number;
+  occurrences: number;
+  transactions: string[]; // transaction_ids
+  created_at: string;
+  user_id: string;
+};
+
+
+export type IPageWithRows = {
+  pageNumber: number;
+  rows: string[];
 };
