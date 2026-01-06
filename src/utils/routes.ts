@@ -7,7 +7,7 @@ const { generatePreSignedUploadUrlController } = new UtilsController();
 
 
 // presigned upload url
-router.get("/upload", generatePreSignedUploadUrlController)
+router.post("/upload", generatePreSignedUploadUrlController)
 
 
 export default router;
