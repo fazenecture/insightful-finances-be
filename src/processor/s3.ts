@@ -23,14 +23,14 @@ export default class S3Service {
         }
     });
 
-    if (!process.env.AWS_S3_BUCKET) {
+    if (!process.env.S3_BUCKET) {
         throw new ErrorHandler({
             status_code: 500,
             message: "AWS_S3_BUCKET is not defined"
         })
     }
 
-    this.defaultBucket = process.env.AWS_S3_BUCKET;
+    this.defaultBucket = process.env.S3_BUCKET;
   }
 
   /**

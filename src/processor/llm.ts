@@ -19,6 +19,7 @@ public extractAndEnrichTransactions = async (input: {
   accountId: string;
   pageText: string;
   accountContext: AccountContext;
+  sessionId: string;
 }): Promise<Transaction[]> => {
 
 const prompt = `
@@ -204,6 +205,7 @@ ${input.pageText}
 
     is_internal_transfer: t.is_internal_transfer,
     currency: "INR",
+    session_id: input.sessionId,
 
     // optional but VERY useful
     confidence: t.confidence,

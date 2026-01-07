@@ -1,4 +1,4 @@
-import { Currency, TransactionDirection, TransactionSource } from "./enums";
+import { AnalysisStatus, Currency, TransactionDirection, TransactionSource } from "./enums";
 
 export type Transaction = {
   transaction_id: string;
@@ -11,6 +11,8 @@ export type Transaction = {
   direction: TransactionDirection;
   source: TransactionSource;
   currency: Currency;
+
+  session_id: string;
 
   category?: string;
   subcategory?: string;
@@ -35,13 +37,16 @@ export type MonthlyMetrics = {
 export type ProcessPdfBatchInput = {
   userId: string;
   accountId: string;
+  sessionId: string;
   pdfKeys: string[];
+  tokensEstimate?: number;
 };
 
 export type ProcessSinglePdfInput = {
   userId: string;
   accountId: string;
   s3Key: string;
+  sessionId: string;
 };
 
 export type ExtractTransactionsInput = {
@@ -58,6 +63,7 @@ export type PersistAnalysisInput = {
 export type GenerateNarrativeInput = {
   userId: string;
   snapshot: any;
+  sessionId: string;
 };
 
 export type AccountContext = {
@@ -93,3 +99,39 @@ export type IPageWithRows = {
   pageNumber: number;
   rows: string[];
 };
+
+export type IFetchAnalysisDataServiceReqObj = {
+  user_id: string;
+  session_id: string;
+}
+
+export type IAnalysisSessionObj = {
+  session_id: string;
+  user_id: string;
+  source_type: string;
+  status: AnalysisStatus;
+  error_message?: string;
+  tokens_expected?: number;
+  tokens_used?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type IFetchNarrativeDbReqObj = {
+  session_id: string;
+  user_id: string;
+}
+
+export type IPdfTextMetrics = {
+  total_chars: number;
+  total_pages: number;
+  non_empty_pages: number;
+};
+
+export type IUpdateAnalysisSessionBySessionIdReqObj = {
+  session_id: string;
+  status: AnalysisStatus;
+  error_message?: string;
+  tokens_used?: number;
+  updated_at?: string;
+}

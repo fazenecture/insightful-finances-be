@@ -15,6 +15,7 @@ import {
   Transaction,
   IDetectedSubscription,
   IPageWithRows,
+  IPdfTextMetrics,
 } from "./types/types";
 import {
   chunkTextByTokens,
@@ -22,6 +23,13 @@ import {
   MAX_TOKENS_PER_CHUNK,
 } from "../helper/token.chunker";
 import { randomUUID } from "node:crypto";
+import {
+  CHARS_PER_TOKEN,
+  COMPLETION_RATIO,
+  LLM_TOKENS_PER_PRODUCT_TOKEN,
+  NARRATIVE_TOKENS,
+  SAFETY_MULTIPLIER,
+} from "./types/enums";
 
 export default class ProcessorHelper extends ProcessorDB {
   protected llm: ProcessorLLM;
@@ -88,6 +96,7 @@ export default class ProcessorHelper extends ProcessorDB {
             accountId: accountIdData,
             pageText: chunk.text,
             accountContext: context,
+            sessionId: input?.sessionId
           });
 
           txns = this.detectInternalTransfers({ transactions: txns });
@@ -412,9 +421,177 @@ export default class ProcessorHelper extends ProcessorDB {
     await this.saveNarrative({
       userId: input.userId,
       narrative,
+      sessionId: input.sessionId
     });
   };
 
   protected sleep = async (input: { ms: number }): Promise<void> =>
     new Promise((resolve) => setTimeout(resolve, input.ms));
+
+  protected computePdfMetrics = (pages: PageTextResult[]): IPdfTextMetrics => {
+    let totalChars = 0;
+    let nonEmptyPages = 0;
+
+    for (const p of pages) {
+      if (typeof p.text === "string" && p.text.trim().length > 0) {
+        totalChars += p.text.length;
+        nonEmptyPages++;
+      }
+    }
+
+    return {
+      total_chars: totalChars,
+      total_pages: pages.length,
+      non_empty_pages: nonEmptyPages,
+    };
+  };
+
+  protected estimatePromptTokensFromPdf = (chars: number): number => {
+    return Math.ceil(chars / CHARS_PER_TOKEN);
+  };
+
+  protected estimateTokensFromPdfSession = (input: {
+    pages: PageTextResult[];
+    chunkSizeTokens: number;
+    baseContextPrompt: string;
+    extractionPromptOverheadTokens: number;
+    narrativeEnabled?: boolean;
+  }): {
+    llmTokensExpected: number;
+    productTokensExpected: number;
+    breakdown: Record<string, number>;
+  } => {
+    const metrics = this.computePdfMetrics(input.pages);
+
+    // Estimate tokens from PDF text
+    const pdfPromptTokens = Math.ceil(metrics.total_chars / CHARS_PER_TOKEN);
+
+    const chunksCount = Math.ceil(pdfPromptTokens / input.chunkSizeTokens);
+
+    // Base context (system prompt, once per session)
+    const contextTokens =
+      Math.ceil(input.baseContextPrompt.length / CHARS_PER_TOKEN) + 300; // structured output buffer
+
+    // Extraction prompt tokens (user messages)
+    const extractionPromptTokens =
+      pdfPromptTokens + chunksCount * input.extractionPromptOverheadTokens;
+
+    // Completion tokens (model output)
+    const extractionCompletionTokens = Math.ceil(
+      extractionPromptTokens * COMPLETION_RATIO
+    );
+
+    let narrativeTokens = 0;
+    if (input.narrativeEnabled) {
+      narrativeTokens = NARRATIVE_TOKENS;
+    }
+
+    const rawTotal =
+      contextTokens +
+      extractionPromptTokens +
+      extractionCompletionTokens +
+      narrativeTokens;
+
+    const llmTokensExpected = Math.ceil(
+      rawTotal * SAFETY_MULTIPLIER
+    );
+
+    // Convert to your product tokens
+    const productTokensExpected = Math.ceil(
+      llmTokensExpected / LLM_TOKENS_PER_PRODUCT_TOKEN
+    );
+
+    return {
+      llmTokensExpected,
+      productTokensExpected,
+      breakdown: {
+        pdf_chars: metrics.total_chars,
+        pages: metrics.total_pages,
+        non_empty_pages: metrics.non_empty_pages,
+        chunks: chunksCount,
+        contextTokens,
+        extractionPromptTokens,
+        extractionCompletionTokens,
+        narrativeTokens,
+        safetyMultiplier: SAFETY_MULTIPLIER,
+      },
+    };
+  };
+
+  protected BASE_CONTEXT_PROMPT = `
+You are a deterministic financial transaction extraction engine
+specialized in Indian bank and credit card statements.
+
+Your responsibility is to extract factual transaction data
+exactly as it appears in statement text.
+
+You must be conservative, literal, and precise.
+You must avoid assumptions and never infer information
+that is not explicitly present.
+
+========================
+CORE PRINCIPLES
+========================
+- Extract only what is present in the text
+- Never hallucinate transactions
+- Never reinterpret transaction meaning
+- Never guess account ownership
+- Never calculate totals or summaries
+- If unsure, return null or false
+
+========================
+TRANSACTION DEFINITIONS
+========================
+- amount: ALWAYS positive
+- inflow: credits, deposits, refunds
+- outflow: debits, spends, withdrawals
+
+========================
+INTERNAL TRANSFER DEFINITION
+========================
+Internal transfer = money moved between TWO accounts
+owned by the SAME user.
+
+Mark as internal transfer ONLY when ownership of both sides
+is explicitly clear.
+
+NEVER mark internal transfer for:
+- Merchant payments
+- Investments (stocks, mutual funds, SIPs, IPOs)
+- Payments to individuals
+- Food, transport, shopping, healthcare, subscriptions
+- Any ambiguous case
+
+When in doubt → false.
+
+========================
+RECURRING TRANSACTION SIGNALS
+========================
+You do NOT confirm subscriptions.
+You only flag possible recurring behavior.
+
+Recurring candidates ONLY when:
+- Explicit mandate terms (SI, AUTO DEBIT, E-MANDATE, NACH)
+- Known recurring service merchants
+
+One-time purchases are still candidates, NOT confirmations.
+Investments are NEVER recurring subscriptions.
+
+========================
+CARD & PAYMENT RULES
+========================
+- Debit card transactions belong to bank accounts
+- Credit card transactions belong ONLY to credit card accounts
+- POS or card transactions without explicit credit card context
+  MUST be treated as bank transactions
+- Standing Instructions from debit cards are NOT credit card spends
+
+========================
+OUTPUT RULES
+========================
+- Output ONLY valid JSON
+- Match the requested schema EXACTLY
+- Do not add extra keys
+- Do not add explanations
+`;
 }
