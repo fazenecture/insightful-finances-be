@@ -5,6 +5,7 @@ import {
   IAnalysisSessionObj,
   IDetectedSubscription,
   IFetchNarrativeDbReqObj,
+  IFetchTransactionsReqObj,
   IUpdateAnalysisSessionBySessionIdReqObj,
   Transaction,
 } from "./types/types";
@@ -136,10 +137,7 @@ export default class ProcessorDB {
       return;
     }
 
-    const query = db.format(
-      `INSERT INTO subscriptions ? `,
-      subscriptions
-    );
+    const query = db.format(`INSERT INTO subscriptions ? `, subscriptions);
 
     await db.query(query);
   };
@@ -210,5 +208,43 @@ export default class ProcessorDB {
     );
 
     await db.query(query, [session_id]);
+  };
+
+  public fetchTransactionDb = async (
+    obj: IFetchTransactionsReqObj
+  ): Promise<Transaction[]> => {
+    const { page, limit, session_id } = obj;
+
+    const offset = page * limit;
+
+    const query = `
+      SELECT *
+      FROM
+        transactions
+      WHERE 
+        session_id = $1
+      LIMIT $2
+      OFFSET $3`;
+
+    const values = [session_id, limit, offset];
+
+    const { rows } = await db.query(query, values);
+    return rows as unknown as Transaction[];
+  };
+
+  public fetchTotalTransactionsCountDb = async (
+    obj: IFetchTransactionsReqObj
+  ) => {
+    const { session_id } = obj;
+
+    const query = `
+      SELECT COUNT(*)
+      FROM
+        transactions
+      WHERE 
+        session_id = $1`;
+
+    const { rows } = await db.query(query, [session_id]);
+    return rows[0].count as unknown as any;
   };
 }

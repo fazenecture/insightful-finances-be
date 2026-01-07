@@ -42,6 +42,7 @@ ACCOUNT CONTEXT (AUTHORITATIVE)
 - Account Type: ${input.accountContext.accountType}
 ${input.accountContext.bankName ? `- Bank Name: ${input.accountContext.bankName}` : ""}
 ${input.accountContext.cardLast4 ? `- Card Last 4 Digits: ${input.accountContext.cardLast4}` : ""}
+- HolderName: ${input.accountContext.holderName}
 
 RULE:
 - If Account Type is "credit_card", all card spends belong to a credit card.
@@ -146,7 +147,7 @@ NON-NEGOTIABLE RULES
   - "upi"
   - "bank"
   - "credit_card"
-- Categorization must be conservative
+- Categorization must be conservative (find it on the basis of transaction notes/merchant)
 - If unsure about category or subcategory, set it to null
 - DO NOT invent transactions
 - DO NOT merge or split transactions

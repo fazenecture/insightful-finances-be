@@ -135,3 +135,10 @@ export type IUpdateAnalysisSessionBySessionIdReqObj = {
   tokens_used?: number;
   updated_at?: string;
 }
+
+export type IFetchTransactionsReqObj = {
+  page: number;
+  limit: number;
+  search: string | null;
+  session_id: string;
+}

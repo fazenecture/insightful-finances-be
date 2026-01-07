@@ -4,6 +4,7 @@ import { MAX_TOKENS_PER_CHUNK } from "../helper/token.chunker";
 import ProcessorHelper from "./helper";
 import {
   IFetchAnalysisDataServiceReqObj,
+  IFetchTransactionsReqObj,
   ProcessPdfBatchInput,
 } from "./types/types";
 import { AnalysisStatus } from "./types/enums";
@@ -43,7 +44,7 @@ export default class ProcessorService extends ProcessorHelper {
         userId,
         accountId,
         s3Key,
-        sessionId: input?.sessionId
+        sessionId: input?.sessionId,
       });
     }
 
@@ -122,5 +123,23 @@ export default class ProcessorService extends ProcessorHelper {
     }
 
     return { total_tokens: totalTokens };
+  };
+
+  public fetchTransactionsService = async (obj: IFetchTransactionsReqObj) => {
+    const [transactionData, transactionTotalCount] = await Promise.all([
+      this.fetchTransactionDb(obj),
+      this.fetchTotalTransactionsCountDb(obj),
+    ]);
+
+    const metaData = {
+      total_items: Number.parseInt(transactionTotalCount),
+      items_on_page: transactionData?.length,
+      page_no: obj.page,
+    };
+
+    return {
+      data: transactionData,
+      meta_data: metaData,
+    };
   };
 }

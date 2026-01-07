@@ -61,4 +61,25 @@ export default class ProcessorController extends ProcessorService {
       customErrorHandler(res, error);
     }
   };
+
+  public fetchTransactionsController = async (req: Request, res: Response) => {
+    try {
+      const { limit, page, search } = req.query,
+        { session_id } = req.params;
+      const { meta_data, data } = await this.fetchTransactionsService({
+        limit: limit ? Number.parseInt(limit.toString()) : 10,
+        page: page ? Number.parseInt(page?.toString()) : 0,
+        search: search?.length ? search.toString() : null,
+        session_id,
+      });
+
+      return res.status(200).send({
+        success: true,
+        meta_data,
+        data,
+      });
+    } catch (error) {
+      customErrorHandler(res, error);
+    }
+  };
 }
