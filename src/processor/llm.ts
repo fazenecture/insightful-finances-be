@@ -83,6 +83,35 @@ CRITICAL DEFINITIONS
 INTERNAL TRANSFER:
 Money moved BETWEEN TWO ACCOUNTS OWNED BY THE SAME USER.
 Examples: savings → salary, bank → own wallet, self transfer.
+Transaction having notes like "moving to another account"
+
+========================
+INTERNAL TRANSFER OVERRIDE RULES (NON-NEGOTIABLE)
+========================
+
+If a transaction is classified as is_internal_transfer = true:
+
+- direction MUST be set based on statement sign ONLY
+  (do NOT reinterpret as income or expense)
+
+- category MUST be "personal_transfer"
+- subcategory MUST be "self_transfer"
+
+Internal transfers are NEVER:
+- income
+- expense
+- salary
+- investment
+
+Explicit internal transfer indicators:
+- RTGS / NEFT / IMPS
+- Counterparty name EXACTLY matches account holder name
+- Phrases like:
+  - "SELF"
+  - "OWN ACCOUNT"
+  - "MOVING FUNDS"
+  - "TRANSFER TO ANOTHER ACCOUNT"
+
 
 NOT INTERNAL TRANSFERS (NEVER mark as internal):
 - Payments to merchants (Zomato, Rapido, Amazon, Blinkit, Swiggy, Apple, etc.)
@@ -92,6 +121,34 @@ NOT INTERNAL TRANSFERS (NEVER mark as internal):
 - Any transaction where ownership of BOTH sides is not explicitly clear
 
 When in doubt, ALWAYS set is_internal_transfer = false.
+
+ACCOUNT HOLDER MATCH RULE (STRICT):
+
+If the counterparty name matches the HolderName
+(even partially, ignoring case and spacing),
+THEN treat it as a potential self-transfer.
+
+Example:
+HolderName: ${input?.accountContext?.holderName}
+Counterparty: ${input?.accountContext?.holderName?.toUpperCase()}
+→ is_internal_transfer = true
+
+
+========================
+DIRECTION DEFINITION (CRITICAL)
+========================
+
+Direction represents USER CASHFLOW, not statement bookkeeping.
+
+For BANK accounts:
+- Credits → inflow
+- Debits → outflow
+
+For CREDIT CARD accounts:
+- Card spends → outflow
+- Refunds → inflow
+- Credit card bill payments ("PAYMENT RECEIVED", "THANK YOU") → outflow
+
 
 ========================
 RECURRING / SUBSCRIPTION SIGNALS (IMPORTANT)
@@ -163,6 +220,191 @@ CARD SOURCE RULES (IMPORTANT):
 - POS or card transactions without explicit credit card context
   MUST default to source = "bank"
 - Standing Instructions (SI) from debit cards are NOT credit card spends
+
+CREDIT CARD STATEMENT SPECIAL RULES (VERY IMPORTANT):
+
+- Credit Card bill payments ("PAYMENT RECEIVED", "THANK YOU")
+  MUST NOT be treated as income.
+
+If Account Type = "credit_card" AND transaction description indicates:
+- "PAYMENT RECEIVED"
+- "THANK YOU"
+- "CREDIT CARD PAYMENT"
+- "BILL PAYMENT"
+
+THEN:
+- direction = "inflow"
+- category = null
+- subcategory = null
+- confidence = 1.0
+
+These are balance settlements, NOT income.
+
+========================
+INCOME CATEGORIZATION RULES
+========================
+
+If direction = "inflow" AND description contains:
+- "SALARY"
+- "PAYROLL"
+- "MONTHLY SAL"
+- "CREDIT SALARY"
+- Employer name + fixed monthly pattern
+
+THEN:
+- category = "financial_services"
+- subcategory = "salary"
+- is_internal_transfer = false
+- confidence = 1.0
+
+========================
+INVESTMENT / DEMAT CATEGORIZATION
+========================
+
+If transaction involves:
+- Demat account
+- Broker
+- Mutual fund platform
+- Stock trading platform
+
+Examples:
+- Groww
+- Zerodha
+- Upstox
+- Angel One
+- ICICI Direct
+- Kuvera
+- Coin
+- NSE
+- BSE
+- "DEMAT"
+- "MF"
+- "SIP"
+
+THEN:
+- category = "financial_services"
+- subcategory = "investment"
+- is_internal_transfer = false
+
+========================
+RULE EVALUATION ORDER (MANDATORY)
+========================
+
+Apply rules in this exact order:
+
+1. Internal transfer detection
+2. Credit card special cases
+3. Income classification (salary)
+4. Investment classification
+5. Merchant-based categorization
+6. Fallback to null
+
+Once a rule applies, DO NOT override it later.
+
+
+========================
+ALLOWED CATEGORIES (STRICT)
+========================
+
+You MUST choose a category ONLY from the list below.
+If a transaction clearly matches one of these categories, you SHOULD assign it.
+If it does not clearly match any, set category = null.
+
+CATEGORIES:
+- food_and_dining
+- groceries
+- shopping
+- transport
+- fuel
+- travel
+- healthcare
+- entertainment
+- subscriptions
+- utilities
+- financial_services
+- personal_transfer
+- accommodation
+- education
+- others
+
+SUBCATEGORY RULES:
+- Subcategory is OPTIONAL
+- Use simple values like:
+  - "restaurant"
+  - "fast_food"
+  - "online_grocery"
+  - "fashion"
+  - "fuel_station"
+  - "flight"
+  - "hotel"
+- If unsure, set subcategory = null
+
+========================
+MERCHANT CATEGORIZATION RULES
+========================
+
+Use the merchant name and transaction description to categorize.
+
+Explicit mappings:
+
+FOOD & DINING:
+- Swiggy
+- Zomato
+- McDonalds
+- Restaurants, cafes, bars
+→ category = "food_and_dining"
+
+GROCERIES:
+- Blinkit
+- Zepto
+- BigBasket
+- Instamart
+→ category = "groceries"
+
+SHOPPING:
+- Amazon (non-flight, non-digital)
+- Myntra
+- Nykaa
+- Ajio
+- Arvind Fashions
+→ category = "shopping"
+
+TRAVEL:
+- Amazon Flights
+- IBIBO GROUP (Goibibo)
+→ category = "travel"
+  subcategory = "flight"
+
+FUEL:
+- Any merchant containing "FUELS", "PETROL", "FILLING STATION"
+→ category = "fuel"
+
+If multiple categories are possible:
+- Prefer the MOST COMMON consumer interpretation
+- Do NOT overthink
+
+========================
+CREDIT CARD BILL PAYMENT OVERRIDE (ABSOLUTE)
+========================
+
+If Account Type = "credit_card" AND transaction description contains:
+- "PAYMENT RECEIVED"
+- "THANK YOU"
+- "CREDIT CARD PAYMENT"
+- "BILL PAYMENT"
+
+THEN FORCE:
+- direction = "outflow"
+- category = null
+- subcategory = null
+- is_internal_transfer = false
+- is_recurring_candidate = false
+- recurring_signal = null
+- confidence = 1.0
+
+This represents the user paying the credit card bill.
+It is NEVER income or inflow.
+
 
 ========================
 CONFIDENCE SCORING
