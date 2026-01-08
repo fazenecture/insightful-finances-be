@@ -310,7 +310,7 @@ export default class ProcessorHelper extends ProcessorDB {
     const subscriptions: IDetectedSubscription[] = [];
 
     for (const [merchant, txns] of groups.entries()) {
-      if (txns.length < 3) continue;
+      if (txns.length < 2) continue;
 
       const dates = txns.map((t) => new Date(t.date)).sort((a, b) => +a - +b);
       const intervals = this.getDayIntervals(dates);
