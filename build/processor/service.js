@@ -16,6 +16,8 @@ const token_chunker_1 = require("../helper/token.chunker");
 const helper_1 = __importDefault(require("./helper"));
 const enums_1 = require("./types/enums");
 const moment_1 = __importDefault(require("moment"));
+const error_handler_1 = __importDefault(require("../helper/error.handler"));
+const logger_1 = __importDefault(require("../helper/logger"));
 class ProcessorService extends helper_1.default {
     constructor() {
         super(...arguments);
@@ -39,7 +41,7 @@ class ProcessorService extends helper_1.default {
             let analysisMs = 0;
             let narrativeMs = 0;
             let dbWriteMs = 0;
-            yield this.insertAnalysisSessionDb([
+            const sessionCheck = yield this.insertAnalysisSessionDb([
                 {
                     session_id: input === null || input === void 0 ? void 0 : input.sessionId,
                     user_id: userId,
@@ -49,6 +51,15 @@ class ProcessorService extends helper_1.default {
                     tokens_expected: (_a = input === null || input === void 0 ? void 0 : input.tokensEstimate) !== null && _a !== void 0 ? _a : 0,
                 },
             ]);
+            for (const session of sessionCheck) {
+                if (!session.is_new) {
+                    logger_1.default.warn(`Analysis session with ID ${session.session_id} already exists.`);
+                    throw new error_handler_1.default({
+                        status_code: 400,
+                        message: `Analysis for this session is already in ${session.status} state.`,
+                    });
+                }
+            }
             const pdfStart = this.now();
             // 1. Process each PDF independently
             for (const s3Key of pdfKeys) {

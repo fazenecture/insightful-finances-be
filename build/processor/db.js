@@ -155,11 +155,22 @@ class ProcessorDB {
             return rows[0];
         });
         this.insertAnalysisSessionDb = (obj) => __awaiter(this, void 0, void 0, function* () {
-            if (obj.length === 0) {
-                return;
-            }
-            const query = postgres_1.default.format(`INSERT INTO analysis_sessions ? `, obj);
-            yield postgres_1.default.query(query);
+            if (obj.length === 0)
+                return [];
+            const query = postgres_1.default.format(`
+    INSERT INTO analysis_sessions
+    (session_id, user_id, source_type, status, error_message, tokens_expected, tokens_used)
+    VALUES ?
+    ON CONFLICT (session_id)
+    DO UPDATE SET
+      session_id = analysis_sessions.session_id -- no-op update
+    RETURNING
+      session_id,
+      status,
+      (xmax = 0) AS is_new
+    `, obj);
+            const { rows } = yield postgres_1.default.query(query);
+            return rows;
         });
         this.updateAnalysisSessionStatusBySessionIdDb = (obj) => __awaiter(this, void 0, void 0, function* () {
             const { session_id } = obj, rest = __rest(obj, ["session_id"]);

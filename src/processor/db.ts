@@ -6,6 +6,7 @@ import {
   IDetectedSubscription,
   IFetchNarrativeDbReqObj,
   IFetchTransactionsReqObj,
+  InsertAnalysisSessionResult,
   IUpdateAnalysisSessionBySessionIdReqObj,
   Transaction,
 } from "./types/types";
@@ -62,7 +63,7 @@ export default class ProcessorDB {
             t.is_internal_transfer ?? false,
             t.is_interest ?? false,
             t.is_fee ?? false,
-          ]
+          ],
         );
       }
 
@@ -95,7 +96,7 @@ export default class ProcessorDB {
   }): Promise<Transaction[]> => {
     const { rows } = await db.query(
       `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date`,
-      [input.userId]
+      [input.userId],
     );
     return rows;
   };
@@ -125,13 +126,13 @@ export default class ProcessorDB {
           expenses = EXCLUDED.expenses,
           net_cashflow = EXCLUDED.net_cashflow
         `,
-        [input.userId, m.month, m.inflow, m.outflow, m.netCashFlow]
+        [input.userId, m.month, m.inflow, m.outflow, m.netCashFlow],
       );
     }
   };
 
   public saveSubscriptions = async (
-    subscriptions: IDetectedSubscription[]
+    subscriptions: IDetectedSubscription[],
   ): Promise<void> => {
     if (subscriptions.length === 0) {
       return;
@@ -153,7 +154,7 @@ export default class ProcessorDB {
       ON CONFLICT (user_id)
       DO UPDATE SET score = EXCLUDED.score
       `,
-      [input.userId, input.score]
+      [input.userId, input.score],
     );
   };
 
@@ -167,7 +168,7 @@ export default class ProcessorDB {
       INSERT INTO financial_narratives (user_id, narrative, session_id)
       VALUES ($1,$2,$3)
       `,
-      [input.userId, input.narrative, input.sessionId]
+      [input.userId, input.narrative, input.sessionId],
     );
   };
 
@@ -186,32 +187,48 @@ export default class ProcessorDB {
     return rows[0] as unknown as any;
   };
 
-  public insertAnalysisSessionDb = async (obj: IAnalysisSessionObj[]) => {
-    if (obj.length === 0) {
-      return;
-    }
+  public insertAnalysisSessionDb = async (
+    obj: IAnalysisSessionObj[],
+  ): Promise<InsertAnalysisSessionResult[]> => {
+    if (obj.length === 0) return [];
 
-    const query = db.format(`INSERT INTO analysis_sessions ? `, obj);
-    await db.query(query);
+    const query = db.format(
+      `
+    INSERT INTO analysis_sessions
+    (session_id, user_id, source_type, status, error_message, tokens_expected, tokens_used)
+    VALUES ?
+    ON CONFLICT (session_id)
+    DO UPDATE SET
+      session_id = analysis_sessions.session_id -- no-op update
+    RETURNING
+      session_id,
+      status,
+      (xmax = 0) AS is_new
+    `,
+      obj,
+    );
+
+    const { rows } = await db.query(query);
+    return rows;
   };
 
   public fetch;
 
   public updateAnalysisSessionStatusBySessionIdDb = async (
-    obj: IUpdateAnalysisSessionBySessionIdReqObj
+    obj: IUpdateAnalysisSessionBySessionIdReqObj,
   ) => {
     const { session_id, ...rest } = obj;
 
     const query = db.format(
       `UPDATE analysis_sessions SET ? WHERE session_id = $1`,
-      rest as any
+      rest as any,
     );
 
     await db.query(query, [session_id]);
   };
 
   public fetchTransactionDb = async (
-    obj: IFetchTransactionsReqObj
+    obj: IFetchTransactionsReqObj,
   ): Promise<Transaction[]> => {
     const { page, limit, session_id } = obj;
 
@@ -233,7 +250,7 @@ export default class ProcessorDB {
   };
 
   public fetchTotalTransactionsCountDb = async (
-    obj: IFetchTransactionsReqObj
+    obj: IFetchTransactionsReqObj,
   ) => {
     const { session_id } = obj;
 

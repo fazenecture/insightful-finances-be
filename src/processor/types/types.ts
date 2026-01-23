@@ -117,6 +117,12 @@ export type IAnalysisSessionObj = {
   updated_at?: string;
 }
 
+export type InsertAnalysisSessionResult = {
+  session_id: string;
+  status: AnalysisStatus;
+  is_new: boolean;
+};
+
 export type IFetchNarrativeDbReqObj = {
   session_id: string;
   user_id: string;
