@@ -21,7 +21,6 @@ const moment_1 = __importDefault(require("moment"));
 const error_handler_1 = __importDefault(require("../helper/error.handler"));
 class ProcessorService extends helper_1.default {
     constructor() {
-        super(...arguments);
         /**
          * Entry point for processing multiple PDFs uploaded to S3.
          * This method is intentionally sequential to:
@@ -29,8 +28,31 @@ class ProcessorService extends helper_1.default {
          * - keep memory usage stable
          * - allow partial progress persistence
          */
-        this.processPdfBatch = (input) => __awaiter(this, void 0, void 0, function* () {
+        super(...arguments);
+        this.executePdfAnalysis = (input) => __awaiter(this, void 0, void 0, function* () {
             var _a;
+            if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
+                input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
+            }
+            const sessionData = yield this.fetchAnalysisSessionBySessionIdDb(input === null || input === void 0 ? void 0 : input.sessionId);
+            if (sessionData === null || sessionData === void 0 ? void 0 : sessionData.status.length) {
+                throw new error_handler_1.default({
+                    status_code: 400,
+                    message: `Analysis session with already in ${sessionData.status} status!`,
+                });
+            }
+            yield this.insertAnalysisSessionDb([
+                {
+                    session_id: input === null || input === void 0 ? void 0 : input.sessionId,
+                    user_id: input.userId,
+                    source_type: "pdf_batch",
+                    status: enums_1.AnalysisStatus.IN_PROGRESS,
+                    created_at: (0, moment_1.default)().format(),
+                    tokens_expected: (_a = input === null || input === void 0 ? void 0 : input.tokensEstimate) !== null && _a !== void 0 ? _a : 0,
+                },
+            ]);
+        });
+        this.processPdfBatch = (input) => __awaiter(this, void 0, void 0, function* () {
             const { userId, accountId, pdfKeys } = input;
             // a fail check
             if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
@@ -47,23 +69,6 @@ class ProcessorService extends helper_1.default {
             let narrativeMs = 0;
             let dbWriteMs = 0;
             let totalPages = 0;
-            const sessionData = yield this.fetchAnalysisSessionBySessionIdDb(input === null || input === void 0 ? void 0 : input.sessionId);
-            if (sessionData === null || sessionData === void 0 ? void 0 : sessionData.status.length) {
-                throw new error_handler_1.default({
-                    status_code: 400,
-                    message: `Analysis session with already in ${sessionData.status} status!`,
-                });
-            }
-            yield this.insertAnalysisSessionDb([
-                {
-                    session_id: input === null || input === void 0 ? void 0 : input.sessionId,
-                    user_id: userId,
-                    source_type: "pdf_batch",
-                    status: enums_1.AnalysisStatus.IN_PROGRESS,
-                    created_at: (0, moment_1.default)().format(),
-                    tokens_expected: (_a = input === null || input === void 0 ? void 0 : input.tokensEstimate) !== null && _a !== void 0 ? _a : 0,
-                },
-            ]);
             const pdfStart = this.now();
             // 1. Process each PDF independently
             for (const s3Key of pdfKeys) {
@@ -160,7 +165,7 @@ class ProcessorService extends helper_1.default {
                     baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
                     extractionPromptOverheadTokens: 900, // static prompt size
                     narrativeEnabled: true,
-                    isBatch
+                    isBatch,
                 });
                 totalTokens += metricsExpected.tokensExpected;
                 totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;

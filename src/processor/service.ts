@@ -20,6 +20,35 @@ export default class ProcessorService extends ProcessorHelper {
    * - keep memory usage stable
    * - allow partial progress persistence
    */
+
+  public executePdfAnalysis = async (input: ProcessPdfBatchInput) => {
+    if (!input?.sessionId) {
+      input.sessionId = `pdf-batch-${randomUUID()}`;
+    }
+
+    const sessionData = await this.fetchAnalysisSessionBySessionIdDb(
+      input?.sessionId!,
+    );
+
+    if (sessionData?.status.length) {
+      throw new ErrorHandler({
+        status_code: 400,
+        message: `Analysis session with already in ${sessionData.status} status!`,
+      });
+    }
+
+    await this.insertAnalysisSessionDb([
+      {
+        session_id: input?.sessionId,
+        user_id: input.userId,
+        source_type: "pdf_batch",
+        status: AnalysisStatus.IN_PROGRESS,
+        created_at: moment().format(),
+        tokens_expected: input?.tokensEstimate ?? 0,
+      },
+    ]);
+  };
+
   public processPdfBatch = async (
     input: ProcessPdfBatchInput,
   ): Promise<void> => {
@@ -43,26 +72,6 @@ export default class ProcessorService extends ProcessorHelper {
     let narrativeMs = 0;
     let dbWriteMs = 0;
     let totalPages = 0;
-
-    const sessionData = await this.fetchAnalysisSessionBySessionIdDb(input?.sessionId!);
-
-    if (sessionData?.status.length) {
-      throw new ErrorHandler({
-        status_code: 400,
-        message: `Analysis session with already in ${sessionData.status} status!`,
-      })
-    }
-
-    await this.insertAnalysisSessionDb([
-      {
-        session_id: input?.sessionId,
-        user_id: userId,
-        source_type: "pdf_batch",
-        status: AnalysisStatus.IN_PROGRESS,
-        created_at: moment().format(),
-        tokens_expected: input?.tokensEstimate ?? 0,
-      },
-    ]);
 
     const pdfStart = this.now();
 
@@ -174,7 +183,7 @@ export default class ProcessorService extends ProcessorHelper {
       totalTimeInSecondsExpected = 0,
       totalMinimumTimeSeconds = 0,
       totalMaximumTimeSeconds = 0;
-    
+
     let isBatch = pdfKeys.length > 1;
 
     for (const s3Key of pdfKeys) {
@@ -194,7 +203,7 @@ export default class ProcessorService extends ProcessorHelper {
         baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
         extractionPromptOverheadTokens: 900, // static prompt size
         narrativeEnabled: true,
-        isBatch
+        isBatch,
       });
 
       totalTokens += metricsExpected.tokensExpected;

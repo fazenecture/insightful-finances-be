@@ -145,12 +145,19 @@ class ProcessorDB {
         this.fetchNarrativeBySessionId = (obj) => __awaiter(this, void 0, void 0, function* () {
             const { session_id, user_id } = obj;
             const query = `
-      SELECT * FROM
-        financial_narratives
+      SELECT
+          analysis_sessions.source_type,
+          analysis_sessions.status,
+          analysis_sessions.error_message,
+          analysis_sessions.meta_data,
+          financial_narratives.*
+      FROM 
+        analysis_sessions
+      LEFT JOIN financial_narratives
+          ON financial_narratives.session_id = analysis_sessions.session_id
       WHERE 
-        session_id = $1 AND user_id = $2
-      LIMIT 1;
-    `;
+        analysis_sessions.session_id = $1 AND analysis_sessions.user_id = $2
+      LIMIT 1;`;
             const { rows } = yield postgres_1.default.query(query, [session_id, user_id]);
             return rows[0];
         });

@@ -22,13 +22,30 @@ class ProcessorController extends service_1.default {
         this.execute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             const { user_id, account_id, pdf_keys, session_id } = req.body;
             try {
-                yield this.processPdfBatch({
+                yield this.executePdfAnalysis({
                     userId: user_id,
                     accountId: account_id,
                     pdfKeys: pdf_keys,
                     sessionId: session_id,
                 });
                 res.status(200).json({ message: "PDF batch processing initiated." });
+                setImmediate(() => __awaiter(this, void 0, void 0, function* () {
+                    this.processPdfBatch({
+                        userId: user_id,
+                        accountId: account_id,
+                        pdfKeys: pdf_keys,
+                        sessionId: session_id,
+                    }).catch((error) => {
+                        console.error(`Error processing PDF batch for session ${session_id}:`, error);
+                        this.updateAnalysisSessionStatusBySessionIdDb({
+                            session_id,
+                            status: enums_1.AnalysisStatus.FAILED,
+                            tokens_used: 0,
+                            error_message: error === null || error === void 0 ? void 0 : error.message,
+                            updated_at: (0, moment_1.default)().format(),
+                        });
+                    });
+                }));
             }
             catch (error) {
                 this.updateAnalysisSessionStatusBySessionIdDb({

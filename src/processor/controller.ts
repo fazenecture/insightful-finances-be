@@ -8,7 +8,7 @@ export default class ProcessorController extends ProcessorService {
   public execute = async (req: Request, res: Response) => {
     const { user_id, account_id, pdf_keys, session_id } = req.body;
     try {
-      await this.processPdfBatch({
+      await this.executePdfAnalysis({
         userId: user_id,
         accountId: account_id,
         pdfKeys: pdf_keys,
@@ -16,6 +16,27 @@ export default class ProcessorController extends ProcessorService {
       });
 
       res.status(200).json({ message: "PDF batch processing initiated." });
+
+      setImmediate(async () => {
+        this.processPdfBatch({
+          userId: user_id,
+          accountId: account_id,
+          pdfKeys: pdf_keys,
+          sessionId: session_id,
+        }).catch((error) => {
+          console.error(
+            `Error processing PDF batch for session ${session_id}:`,
+            error,
+          );
+          this.updateAnalysisSessionStatusBySessionIdDb({
+            session_id,
+            status: AnalysisStatus.FAILED,
+            tokens_used: 0,
+            error_message: error?.message,
+            updated_at: moment().format(),
+          });
+        });
+      });
     } catch (error: any) {
       this.updateAnalysisSessionStatusBySessionIdDb({
         session_id,
