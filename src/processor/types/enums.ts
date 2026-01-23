@@ -49,16 +49,20 @@ export const NARRATIVE_TOKENS = 1500;      // fixed overhead for narrative gener
 
 export const PERFORMANCE_CONSTANTS = {
   // PDF processing
-  PDF_PARSE_MS_PER_PAGE: 120,        // conservative avg
+  PDF_PARSE_MS_PER_PAGE: 150,        // conservative avg
 
   // LLM calls (measured averages)
-  CONTEXT_DETECTION_MS: 1800,        // first page
-  EXTRACTION_MS_PER_CHUNK: 2200,     // per chunk
-  NARRATIVE_MS: 2500,                // bounded
+  CONTEXT_DETECTION_MS: 2600,        // first page
+  EXTRACTION_MS_PER_CHUNK: 3000,     // per chunk
+  NARRATIVE_MS: 14000,                // bounded
 
   // Parallelism assumptions
-  MAX_PARALLEL_CHUNKS: 1,            // sequential (safe)
+  MAX_PARALLEL_CHUNKS: 6,            // sequential (safe)
   
   // Safety buffer
-  TIME_SAFETY_MULTIPLIER: 1.25
+  TIME_SAFETY_MULTIPLIER: 2,
+
+  BASE_TIME_SAFETY: 1.25,
 };
+
+export const TOKENS_PER_PAGE_ESTIMATE = 10000;

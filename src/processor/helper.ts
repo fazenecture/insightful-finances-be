@@ -30,6 +30,7 @@ import {
   NARRATIVE_TOKENS,
   PERFORMANCE_CONSTANTS,
   SAFETY_MULTIPLIER,
+  TOKENS_PER_PAGE_ESTIMATE,
 } from "./types/enums";
 import { token } from "morgan";
 
@@ -118,7 +119,10 @@ export default class ProcessorHelper extends ProcessorDB {
       ),
     );
 
-    return tokenData;
+    return {
+      token_used: tokenData,
+      page_count: pages.length,
+    };
   };
 
   /* ================================
@@ -534,23 +538,31 @@ export default class ProcessorHelper extends ProcessorDB {
     baseContextPromptLength: number;
     extractionPromptOverheadTokens: number;
     narrativeEnabled?: boolean;
+    isBatch?: boolean;
   }): {
     tokensExpected: number;
     timeSecondsExpected: number;
     breakdown: Record<string, number>;
+    timeEstimate: {
+      minSeconds: number;
+      maxSeconds: number;
+    };
   } => {
     const metrics = this.computePdfMetrics(input.pages);
 
     // ---------- TOKEN ESTIMATION ----------
     const tokenData = this.estimateTokensFromPdfSession(input);
 
+    const estimatedPdfTokens = Math.max(
+      Math.ceil(metrics.total_chars / CHARS_PER_TOKEN),
+      metrics.non_empty_pages * TOKENS_PER_PAGE_ESTIMATE,
+    );
+
+    const chunksCount = Math.ceil(estimatedPdfTokens / input.chunkSizeTokens);
+
     // ---------- TIME ESTIMATION ----------
     const parseTimeMs =
       metrics.total_pages * PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
-
-    const chunksCount = Math.ceil(
-      tokenData.breakdown.extractionPromptTokens / input.chunkSizeTokens,
-    );
 
     const contextTimeMs = PERFORMANCE_CONSTANTS.CONTEXT_DETECTION_MS;
 
@@ -561,28 +573,62 @@ export default class ProcessorHelper extends ProcessorDB {
       ? PERFORMANCE_CONSTANTS.NARRATIVE_MS
       : 0;
 
+    const SMALL_PDF_PENALTY = metrics.total_pages <= 3 ? 1.3 : 1;
+    const MULTI_PDF_PENALTY = input.isBatch ? 1.15 : 1;
+
     const totalTimeMs =
       (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
-      PERFORMANCE_CONSTANTS.TIME_SAFETY_MULTIPLIER;
+      PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
+      SMALL_PDF_PENALTY *
+      MULTI_PDF_PENALTY;
+
+    const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
+
+    console.log("🔍 PDF METRICS", {
+      total_pages: metrics.total_pages,
+      non_empty_pages: metrics.non_empty_pages,
+      total_chars: metrics.total_chars,
+      estimatedPdfTokens: Math.ceil(metrics.total_chars / CHARS_PER_TOKEN),
+      chunkSizeTokens: input.chunkSizeTokens,
+    });
+
+    console.log("🔍 CHUNK CALC", {
+      estimatedPdfTokens,
+      chunksCount,
+    });
+
+    const timeSecondsExpected = Math.max(
+      Math.ceil(totalTimeMs / 1000),
+      MIN_SECONDS,
+    );
 
     return {
       tokensExpected: tokenData.productTokensExpected,
-      timeSecondsExpected: Math.ceil(totalTimeMs / 1000),
+      timeSecondsExpected: timeSecondsExpected,
+      timeEstimate: {
+        minSeconds: timeSecondsExpected,
+        maxSeconds: Math.ceil(timeSecondsExpected * 1.35),
+      },
       breakdown: {
         ...tokenData.breakdown,
+
+        // 🔍 transparency
+        estimatedPdfTokens,
+        chunks: chunksCount,
+
         parseTimeMs,
         contextTimeMs,
         extractionTimeMs,
         narrativeTimeMs,
-        chunks: chunksCount,
       },
     };
   };
 
-  protected BASE_CONTEXT_PROMPT_LENGTH = 1000;
+  protected BASE_CONTEXT_PROMPT_LENGTH = 2000;
 
   protected now = () => process.hrtime.bigint();
+
   protected ms = (start: bigint, end: bigint): number => {
     return Number(end - start) / 1_000_000;
-  }
+  };
 }

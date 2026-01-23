@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PERFORMANCE_CONSTANTS = exports.NARRATIVE_TOKENS = exports.LLM_TOKENS_PER_PRODUCT_TOKEN = exports.SAFETY_MULTIPLIER = exports.COMPLETION_RATIO = exports.CHARS_PER_TOKEN = exports.AnalysisStatus = exports.Currency = exports.Category = exports.TransactionSource = exports.TransactionDirection = void 0;
+exports.TOKENS_PER_PAGE_ESTIMATE = exports.PERFORMANCE_CONSTANTS = exports.NARRATIVE_TOKENS = exports.LLM_TOKENS_PER_PRODUCT_TOKEN = exports.SAFETY_MULTIPLIER = exports.COMPLETION_RATIO = exports.CHARS_PER_TOKEN = exports.AnalysisStatus = exports.Currency = exports.Category = exports.TransactionSource = exports.TransactionDirection = void 0;
 var TransactionDirection;
 (function (TransactionDirection) {
     TransactionDirection["INFLOW"] = "inflow";
@@ -50,14 +50,16 @@ exports.LLM_TOKENS_PER_PRODUCT_TOKEN = 1000; // 1:1 mapping
 exports.NARRATIVE_TOKENS = 1500; // fixed overhead for narrative generation
 exports.PERFORMANCE_CONSTANTS = {
     // PDF processing
-    PDF_PARSE_MS_PER_PAGE: 120, // conservative avg
+    PDF_PARSE_MS_PER_PAGE: 150, // conservative avg
     // LLM calls (measured averages)
-    CONTEXT_DETECTION_MS: 1800, // first page
-    EXTRACTION_MS_PER_CHUNK: 2200, // per chunk
-    NARRATIVE_MS: 2500, // bounded
+    CONTEXT_DETECTION_MS: 2600, // first page
+    EXTRACTION_MS_PER_CHUNK: 3000, // per chunk
+    NARRATIVE_MS: 14000, // bounded
     // Parallelism assumptions
-    MAX_PARALLEL_CHUNKS: 1, // sequential (safe)
+    MAX_PARALLEL_CHUNKS: 6, // sequential (safe)
     // Safety buffer
-    TIME_SAFETY_MULTIPLIER: 1.25
+    TIME_SAFETY_MULTIPLIER: 2,
+    BASE_TIME_SAFETY: 1.25,
 };
+exports.TOKENS_PER_PAGE_ESTIMATE = 10000;
 //# sourceMappingURL=enums.js.map

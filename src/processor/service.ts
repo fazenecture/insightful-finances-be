@@ -42,6 +42,7 @@ export default class ProcessorService extends ProcessorHelper {
     let analysisMs = 0;
     let narrativeMs = 0;
     let dbWriteMs = 0;
+    let totalPages = 0;
 
     const sessionData = await this.fetchAnalysisSessionBySessionIdDb(input?.sessionId!);
 
@@ -67,14 +68,15 @@ export default class ProcessorService extends ProcessorHelper {
 
     // 1. Process each PDF independently
     for (const s3Key of pdfKeys) {
-      const tokensUsed = await this.processSinglePdf({
+      const tokenData = await this.processSinglePdf({
         userId,
         accountId,
         s3Key,
         sessionId: input?.sessionId,
       });
 
-      totalTokensUsed += tokensUsed.productTokensExpected;
+      totalTokensUsed += tokenData.token_used.productTokensExpected;
+      totalPages += tokenData.page_count;
     }
 
     pdfProcessingMs = this.ms(pdfStart, this.now());
@@ -118,6 +120,7 @@ export default class ProcessorService extends ProcessorHelper {
 
     const metaData = {
       pdf_count: pdfKeys.length,
+      total_pages: totalPages,
       total_transactions: allTransactions.length,
       metric: {
         started_at: startedAt,
@@ -168,7 +171,11 @@ export default class ProcessorService extends ProcessorHelper {
     const { userId, accountId, pdfKeys } = reqObj;
 
     let totalTokens = 0,
-      totalTimeInSecondsExpected = 0;
+      totalTimeInSecondsExpected = 0,
+      totalMinimumTimeSeconds = 0,
+      totalMaximumTimeSeconds = 0;
+    
+    let isBatch = pdfKeys.length > 1;
 
     for (const s3Key of pdfKeys) {
       const pages = await this.extractPdfFromUrl({ url: s3Key });
@@ -187,15 +194,23 @@ export default class ProcessorService extends ProcessorHelper {
         baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
         extractionPromptOverheadTokens: 900, // static prompt size
         narrativeEnabled: true,
+        isBatch
       });
 
       totalTokens += metricsExpected.tokensExpected;
       totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
+      totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
+      totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
     }
 
     return {
       total_tokens: totalTokens,
       total_time_seconds: totalTimeInSecondsExpected,
+      total_time_estimate: {
+        min_seconds: totalMinimumTimeSeconds,
+        max_seconds: totalMaximumTimeSeconds,
+        display: `${totalMinimumTimeSeconds}-${totalMaximumTimeSeconds} sec`,
+      },
     };
   };
 

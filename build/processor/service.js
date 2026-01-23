@@ -46,6 +46,7 @@ class ProcessorService extends helper_1.default {
             let analysisMs = 0;
             let narrativeMs = 0;
             let dbWriteMs = 0;
+            let totalPages = 0;
             const sessionData = yield this.fetchAnalysisSessionBySessionIdDb(input === null || input === void 0 ? void 0 : input.sessionId);
             if (sessionData === null || sessionData === void 0 ? void 0 : sessionData.status.length) {
                 throw new error_handler_1.default({
@@ -66,13 +67,14 @@ class ProcessorService extends helper_1.default {
             const pdfStart = this.now();
             // 1. Process each PDF independently
             for (const s3Key of pdfKeys) {
-                const tokensUsed = yield this.processSinglePdf({
+                const tokenData = yield this.processSinglePdf({
                     userId,
                     accountId,
                     s3Key,
                     sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
                 });
-                totalTokensUsed += tokensUsed.productTokensExpected;
+                totalTokensUsed += tokenData.token_used.productTokensExpected;
+                totalPages += tokenData.page_count;
             }
             pdfProcessingMs = this.ms(pdfStart, this.now());
             // 2. Fetch canonical ledger (all transactions)
@@ -104,6 +106,7 @@ class ProcessorService extends helper_1.default {
             const totalDurationMs = this.ms(t0, this.now());
             const metaData = {
                 pdf_count: pdfKeys.length,
+                total_pages: totalPages,
                 total_transactions: allTransactions.length,
                 metric: {
                     started_at: startedAt,
@@ -140,7 +143,8 @@ class ProcessorService extends helper_1.default {
         });
         this.fetchTokenEstimateService = (reqObj) => __awaiter(this, void 0, void 0, function* () {
             const { userId, accountId, pdfKeys } = reqObj;
-            let totalTokens = 0, totalTimeInSecondsExpected = 0;
+            let totalTokens = 0, totalTimeInSecondsExpected = 0, totalMinimumTimeSeconds = 0, totalMaximumTimeSeconds = 0;
+            let isBatch = pdfKeys.length > 1;
             for (const s3Key of pdfKeys) {
                 const pages = yield this.extractPdfFromUrl({ url: s3Key });
                 // const tokenData = this.estimateTokensFromPdfSession({
@@ -156,13 +160,21 @@ class ProcessorService extends helper_1.default {
                     baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
                     extractionPromptOverheadTokens: 900, // static prompt size
                     narrativeEnabled: true,
+                    isBatch
                 });
                 totalTokens += metricsExpected.tokensExpected;
                 totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
+                totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
+                totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
             }
             return {
                 total_tokens: totalTokens,
                 total_time_seconds: totalTimeInSecondsExpected,
+                total_time_estimate: {
+                    min_seconds: totalMinimumTimeSeconds,
+                    max_seconds: totalMaximumTimeSeconds,
+                    display: `${totalMinimumTimeSeconds}-${totalMaximumTimeSeconds} sec`,
+                },
             };
         });
         this.fetchTransactionsService = (obj) => __awaiter(this, void 0, void 0, function* () {
