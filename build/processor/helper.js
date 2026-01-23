@@ -36,6 +36,13 @@ class ProcessorHelper extends db_1.default {
             /**
              * get the context from the first page
              */
+            const tokenData = this.estimateTokensFromPdfSession({
+                pages,
+                chunkSizeTokens: token_chunker_1.MAX_TOKENS_PER_CHUNK,
+                baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
+                extractionPromptOverheadTokens: 900, // static prompt size
+                narrativeEnabled: true,
+            });
             const limit = (0, p_limit_1.default)(10); // tune: 6–12 is safe
             const context = yield this.llm.detectStatementContext({
                 firstPageText: pages[0].text,
@@ -45,8 +52,7 @@ class ProcessorHelper extends db_1.default {
                 pageNumber: idx + 1,
                 rows: this.splitPageIntoRows(p.text),
             }));
-            const chunks = this.chunkRowsByTokens(pagesWithRows, token_chunker_1.MAX_TOKENS_PER_CHUNK, token_chunker_1.estimateTokens // your tokenizer
-            );
+            const chunks = this.chunkRowsByTokens(pagesWithRows, token_chunker_1.MAX_TOKENS_PER_CHUNK, token_chunker_1.estimateTokens);
             console.log(`Total chunks: ${chunks.length}`);
             const accountIdData = [
                 (_a = context.bankName) !== null && _a !== void 0 ? _a : "UNKNOWN_BANK",
@@ -60,13 +66,14 @@ class ProcessorHelper extends db_1.default {
                     accountId: accountIdData,
                     pageText: chunk.text,
                     accountContext: context,
-                    sessionId: input === null || input === void 0 ? void 0 : input.sessionId
+                    sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
                 });
                 txns = this.detectInternalTransfers({ transactions: txns });
                 if (txns.length) {
                     yield this.insertBulkTransactions({ transactions: txns });
                 }
             }))));
+            return tokenData;
         });
         /* ================================
            PDF HELPERS
@@ -282,7 +289,7 @@ class ProcessorHelper extends db_1.default {
             yield this.saveNarrative({
                 userId: input.userId,
                 narrative,
-                sessionId: input.sessionId
+                sessionId: input.sessionId,
             });
         });
         this.sleep = (input) => __awaiter(this, void 0, void 0, function* () { return new Promise((resolve) => setTimeout(resolve, input.ms)); });
@@ -310,7 +317,7 @@ class ProcessorHelper extends db_1.default {
             const pdfPromptTokens = Math.ceil(metrics.total_chars / enums_1.CHARS_PER_TOKEN);
             const chunksCount = Math.ceil(pdfPromptTokens / input.chunkSizeTokens);
             // Base context (system prompt, once per session)
-            const contextTokens = Math.ceil(input.baseContextPrompt.length / enums_1.CHARS_PER_TOKEN) + 300; // structured output buffer
+            const contextTokens = Math.ceil(input.baseContextPromptLength / enums_1.CHARS_PER_TOKEN) + 300; // structured output buffer
             // Extraction prompt tokens (user messages)
             const extractionPromptTokens = pdfPromptTokens + chunksCount * input.extractionPromptOverheadTokens;
             // Completion tokens (model output)
@@ -347,20 +354,14 @@ class ProcessorHelper extends db_1.default {
             // ---------- TOKEN ESTIMATION ----------
             const tokenData = this.estimateTokensFromPdfSession(input);
             // ---------- TIME ESTIMATION ----------
-            const parseTimeMs = metrics.total_pages *
-                enums_1.PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
-            const chunksCount = Math.ceil(tokenData.breakdown.extractionPromptTokens /
-                input.chunkSizeTokens);
+            const parseTimeMs = metrics.total_pages * enums_1.PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
+            const chunksCount = Math.ceil(tokenData.breakdown.extractionPromptTokens / input.chunkSizeTokens);
             const contextTimeMs = enums_1.PERFORMANCE_CONSTANTS.CONTEXT_DETECTION_MS;
-            const extractionTimeMs = chunksCount *
-                enums_1.PERFORMANCE_CONSTANTS.EXTRACTION_MS_PER_CHUNK;
+            const extractionTimeMs = chunksCount * enums_1.PERFORMANCE_CONSTANTS.EXTRACTION_MS_PER_CHUNK;
             const narrativeTimeMs = input.narrativeEnabled
                 ? enums_1.PERFORMANCE_CONSTANTS.NARRATIVE_MS
                 : 0;
-            const totalTimeMs = (parseTimeMs +
-                contextTimeMs +
-                extractionTimeMs +
-                narrativeTimeMs) *
+            const totalTimeMs = (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
                 enums_1.PERFORMANCE_CONSTANTS.TIME_SAFETY_MULTIPLIER;
             return {
                 tokensExpected: tokenData.productTokensExpected,
@@ -368,85 +369,14 @@ class ProcessorHelper extends db_1.default {
                 breakdown: Object.assign(Object.assign({}, tokenData.breakdown), { parseTimeMs,
                     contextTimeMs,
                     extractionTimeMs,
-                    narrativeTimeMs, chunks: chunksCount })
+                    narrativeTimeMs, chunks: chunksCount }),
             };
         };
-        this.BASE_CONTEXT_PROMPT = `
-You are a deterministic financial transaction extraction engine
-specialized in Indian bank and credit card statements.
-
-Your responsibility is to extract factual transaction data
-exactly as it appears in statement text.
-
-You must be conservative, literal, and precise.
-You must avoid assumptions and never infer information
-that is not explicitly present.
-
-========================
-CORE PRINCIPLES
-========================
-- Extract only what is present in the text
-- Never hallucinate transactions
-- Never reinterpret transaction meaning
-- Never guess account ownership
-- Never calculate totals or summaries
-- If unsure, return null or false
-
-========================
-TRANSACTION DEFINITIONS
-========================
-- amount: ALWAYS positive
-- inflow: credits, deposits, refunds
-- outflow: debits, spends, withdrawals
-
-========================
-INTERNAL TRANSFER DEFINITION
-========================
-Internal transfer = money moved between TWO accounts
-owned by the SAME user.
-
-Mark as internal transfer ONLY when ownership of both sides
-is explicitly clear.
-
-NEVER mark internal transfer for:
-- Merchant payments
-- Investments (stocks, mutual funds, SIPs, IPOs)
-- Payments to individuals
-- Food, transport, shopping, healthcare, subscriptions
-- Any ambiguous case
-
-When in doubt → false.
-
-========================
-RECURRING TRANSACTION SIGNALS
-========================
-You do NOT confirm subscriptions.
-You only flag possible recurring behavior.
-
-Recurring candidates ONLY when:
-- Explicit mandate terms (SI, AUTO DEBIT, E-MANDATE, NACH)
-- Known recurring service merchants
-
-One-time purchases are still candidates, NOT confirmations.
-Investments are NEVER recurring subscriptions.
-
-========================
-CARD & PAYMENT RULES
-========================
-- Debit card transactions belong to bank accounts
-- Credit card transactions belong ONLY to credit card accounts
-- POS or card transactions without explicit credit card context
-  MUST be treated as bank transactions
-- Standing Instructions from debit cards are NOT credit card spends
-
-========================
-OUTPUT RULES
-========================
-- Output ONLY valid JSON
-- Match the requested schema EXACTLY
-- Do not add extra keys
-- Do not add explanations
-`;
+        this.BASE_CONTEXT_PROMPT_LENGTH = 1000;
+        this.now = () => process.hrtime.bigint();
+        this.ms = (start, end) => {
+            return Number(end - start) / 1000000;
+        };
         this.llm = new llm_1.default();
         this.analysis = new analysis_1.default();
         this.s3 = new s3_1.default();

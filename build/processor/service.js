@@ -32,6 +32,13 @@ class ProcessorService extends helper_1.default {
             /**
              * Analysis Session
              */
+            const startedAt = (0, moment_1.default)().toISOString();
+            const t0 = this.now();
+            let totalTokensUsed = 0;
+            let pdfProcessingMs = 0;
+            let analysisMs = 0;
+            let narrativeMs = 0;
+            let dbWriteMs = 0;
             yield this.insertAnalysisSessionDb([
                 {
                     session_id: input === null || input === void 0 ? void 0 : input.sessionId,
@@ -42,38 +49,66 @@ class ProcessorService extends helper_1.default {
                     tokens_expected: (_a = input === null || input === void 0 ? void 0 : input.tokensEstimate) !== null && _a !== void 0 ? _a : 0,
                 },
             ]);
+            const pdfStart = this.now();
             // 1. Process each PDF independently
             for (const s3Key of pdfKeys) {
-                yield this.processSinglePdf({
+                const tokensUsed = yield this.processSinglePdf({
                     userId,
                     accountId,
                     s3Key,
                     sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
                 });
+                totalTokensUsed += tokensUsed.productTokensExpected;
             }
+            pdfProcessingMs = this.ms(pdfStart, this.now());
             // 2. Fetch canonical ledger (all transactions)
+            const analysisStart = this.now();
             const allTransactions = yield this.fetchTransactionsByUser({
                 userId,
             });
             // 3. Run deterministic financial analysis
             const analysisSnapshot = this.runFullAnalysis(allTransactions);
+            analysisMs = this.ms(analysisStart, this.now());
+            // 3️⃣ Persist snapshot
+            const dbStart = this.now();
             // 4. Persist computed metrics
             yield this.persistAnalysisSnapshot({
                 userId,
                 snapshot: analysisSnapshot,
             });
+            dbWriteMs += this.ms(dbStart, this.now());
             // 5. Generate read-only AI narrative
+            const narrativeStart = this.now();
             const narrative = yield this.generateNarrativeSnapshot({
                 userId,
                 snapshot: analysisSnapshot,
                 sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
             });
             console.log("narrative: ", narrative);
+            narrativeMs = this.ms(narrativeStart, this.now());
+            const completedAt = (0, moment_1.default)().toISOString();
+            const totalDurationMs = this.ms(t0, this.now());
+            const metaData = {
+                pdf_count: pdfKeys.length,
+                total_transactions: allTransactions.length,
+                metric: {
+                    started_at: startedAt,
+                    completed_at: completedAt,
+                    total_duration_ms: Math.round(totalDurationMs),
+                    breakdown: {
+                        analysis_ms: Math.round(analysisMs),
+                        narrative_ms: Math.round(narrativeMs),
+                        db_write_ms: Math.round(dbWriteMs),
+                        pdf_processing_ms: Math.round(pdfProcessingMs),
+                    },
+                },
+            };
             yield this.updateAnalysisSessionStatusBySessionIdDb({
                 session_id: input === null || input === void 0 ? void 0 : input.sessionId,
                 status: enums_1.AnalysisStatus.COMPLETED,
-                tokens_used: input === null || input === void 0 ? void 0 : input.tokensEstimate,
+                tokens_used: totalTokensUsed,
                 updated_at: (0, moment_1.default)().format(),
+                meta_data: metaData,
             });
             return narrative;
         });
@@ -97,11 +132,10 @@ class ProcessorService extends helper_1.default {
                 const tokenData = this.estimateTokensFromPdfSession({
                     pages,
                     chunkSizeTokens: token_chunker_1.MAX_TOKENS_PER_CHUNK,
-                    baseContextPrompt: this.BASE_CONTEXT_PROMPT,
+                    baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
                     extractionPromptOverheadTokens: 900, // static prompt size
                     narrativeEnabled: true,
                 });
-                console.log("tokenData: ", tokenData);
                 totalTokens += tokenData.productTokensExpected;
             }
             return { total_tokens: totalTokens };

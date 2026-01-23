@@ -31,6 +31,7 @@ import {
   PERFORMANCE_CONSTANTS,
   SAFETY_MULTIPLIER,
 } from "./types/enums";
+import { token } from "morgan";
 
 export default class ProcessorHelper extends ProcessorDB {
   protected llm: ProcessorLLM;
@@ -49,13 +50,21 @@ export default class ProcessorHelper extends ProcessorDB {
      ================================ */
 
   protected processSinglePdf = async (
-    input: ProcessSinglePdfInput
-  ): Promise<void> => {
+    input: ProcessSinglePdfInput,
+  ): Promise<any> => {
     const { userId, s3Key } = input;
     const pages = await this.extractPdfFromUrl({ url: s3Key });
     /**
      * get the context from the first page
      */
+
+    const tokenData = this.estimateTokensFromPdfSession({
+      pages,
+      chunkSizeTokens: MAX_TOKENS_PER_CHUNK,
+      baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
+      extractionPromptOverheadTokens: 900, // static prompt size
+      narrativeEnabled: true,
+    });
 
     const limit = pLimit(10); // tune: 6–12 is safe
 
@@ -72,7 +81,7 @@ export default class ProcessorHelper extends ProcessorDB {
     const chunks = this.chunkRowsByTokens(
       pagesWithRows,
       MAX_TOKENS_PER_CHUNK,
-      estimateTokens // your tokenizer
+      estimateTokens, // your tokenizer
     );
 
     console.log(`Total chunks: ${chunks.length}`);
@@ -89,7 +98,7 @@ export default class ProcessorHelper extends ProcessorDB {
           console.log(
             `Processing chunk ${index + 1}/${
               chunks.length
-            } (pages: ${chunk.pages.join(",")})`
+            } (pages: ${chunk.pages.join(",")})`,
           );
 
           let txns = await this.llm.extractAndEnrichTransactions({
@@ -97,7 +106,7 @@ export default class ProcessorHelper extends ProcessorDB {
             accountId: accountIdData,
             pageText: chunk.text,
             accountContext: context,
-            sessionId: input?.sessionId
+            sessionId: input?.sessionId,
           });
 
           txns = this.detectInternalTransfers({ transactions: txns });
@@ -105,9 +114,11 @@ export default class ProcessorHelper extends ProcessorDB {
           if (txns.length) {
             await this.insertBulkTransactions({ transactions: txns });
           }
-        })
-      )
+        }),
+      ),
     );
+
+    return tokenData;
   };
 
   /* ================================
@@ -131,7 +142,7 @@ export default class ProcessorHelper extends ProcessorDB {
   private readonly chunkRowsByTokens = (
     pages: IPageWithRows[],
     maxTokens: number,
-    estimateTokens: (s: string) => number
+    estimateTokens: (s: string) => number,
   ) => {
     const chunks: {
       text: string;
@@ -181,7 +192,7 @@ export default class ProcessorHelper extends ProcessorDB {
   };
 
   private parseS3Url = (
-    s3Url: string
+    s3Url: string,
   ): {
     bucket: string;
     key: string;
@@ -248,7 +259,7 @@ export default class ProcessorHelper extends ProcessorDB {
      ================================ */
 
   protected runFullAnalysis = (
-    transactions: Transaction[]
+    transactions: Transaction[],
   ): {
     core: any;
     cashflow: any;
@@ -289,7 +300,7 @@ export default class ProcessorHelper extends ProcessorDB {
      ================================ */
 
   protected persistAnalysisSnapshot = async (
-    input: PersistAnalysisInput
+    input: PersistAnalysisInput,
   ): Promise<void> => {
     await this.saveMonthlyMetrics({
       userId: input.userId,
@@ -320,7 +331,7 @@ export default class ProcessorHelper extends ProcessorDB {
       if (!cadence) continue;
 
       const avgAmount = this.average(
-        txns.map((t) => parseInt(t.amount.toString()))
+        txns.map((t) => parseInt(t.amount.toString())),
       );
       const variance =
         this.stdDev(txns.map((t) => parseInt(t.amount.toString()))) / avgAmount;
@@ -357,7 +368,7 @@ export default class ProcessorHelper extends ProcessorDB {
   };
 
   protected groupByMerchant = (
-    transactions: Transaction[]
+    transactions: Transaction[],
   ): Map<string, Transaction[]> => {
     const map = new Map<string, Transaction[]>();
 
@@ -398,7 +409,7 @@ export default class ProcessorHelper extends ProcessorDB {
   };
 
   protected detectCadence = (
-    intervals: number[]
+    intervals: number[],
   ): "weekly" | "monthly" | "annual" | null => {
     if (intervals.length < 2) return null;
 
@@ -415,14 +426,14 @@ export default class ProcessorHelper extends ProcessorDB {
     values.reduce((a, b) => a + b, 0) / values.length;
 
   protected generateNarrativeSnapshot = async (
-    input: GenerateNarrativeInput
+    input: GenerateNarrativeInput,
   ): Promise<void> => {
     const narrative = await this.llm.generateNarrative(input);
 
     await this.saveNarrative({
       userId: input.userId,
       narrative,
-      sessionId: input.sessionId
+      sessionId: input.sessionId,
     });
   };
 
@@ -454,7 +465,7 @@ export default class ProcessorHelper extends ProcessorDB {
   protected estimateTokensFromPdfSession = (input: {
     pages: PageTextResult[];
     chunkSizeTokens: number;
-    baseContextPrompt: string;
+    baseContextPromptLength: number;
     extractionPromptOverheadTokens: number;
     narrativeEnabled?: boolean;
   }): {
@@ -471,7 +482,7 @@ export default class ProcessorHelper extends ProcessorDB {
 
     // Base context (system prompt, once per session)
     const contextTokens =
-      Math.ceil(input.baseContextPrompt.length / CHARS_PER_TOKEN) + 300; // structured output buffer
+      Math.ceil(input.baseContextPromptLength / CHARS_PER_TOKEN) + 300; // structured output buffer
 
     // Extraction prompt tokens (user messages)
     const extractionPromptTokens =
@@ -479,7 +490,7 @@ export default class ProcessorHelper extends ProcessorDB {
 
     // Completion tokens (model output)
     const extractionCompletionTokens = Math.ceil(
-      extractionPromptTokens * COMPLETION_RATIO
+      extractionPromptTokens * COMPLETION_RATIO,
     );
 
     let narrativeTokens = 0;
@@ -493,13 +504,11 @@ export default class ProcessorHelper extends ProcessorDB {
       extractionCompletionTokens +
       narrativeTokens;
 
-    const llmTokensExpected = Math.ceil(
-      rawTotal * SAFETY_MULTIPLIER
-    );
+    const llmTokensExpected = Math.ceil(rawTotal * SAFETY_MULTIPLIER);
 
     // Convert to your product tokens
     const productTokensExpected = Math.ceil(
-      llmTokensExpected / LLM_TOKENS_PER_PRODUCT_TOKEN
+      llmTokensExpected / LLM_TOKENS_PER_PRODUCT_TOKEN,
     );
 
     return {
@@ -520,138 +529,60 @@ export default class ProcessorHelper extends ProcessorDB {
   };
 
   protected estimateTokensAndTimeFromPdfSession = (input: {
-  pages: PageTextResult[];
-  chunkSizeTokens: number;
-  baseContextPrompt: string;
-  extractionPromptOverheadTokens: number;
-  narrativeEnabled?: boolean;
-}): {
-  tokensExpected: number;
-  timeSecondsExpected: number;
-  breakdown: Record<string, number>;
-} => {
-  const metrics = this.computePdfMetrics(input.pages);
+    pages: PageTextResult[];
+    chunkSizeTokens: number;
+    baseContextPromptLength: number;
+    extractionPromptOverheadTokens: number;
+    narrativeEnabled?: boolean;
+  }): {
+    tokensExpected: number;
+    timeSecondsExpected: number;
+    breakdown: Record<string, number>;
+  } => {
+    const metrics = this.computePdfMetrics(input.pages);
 
-  // ---------- TOKEN ESTIMATION ----------
-  const tokenData = this.estimateTokensFromPdfSession(input);
+    // ---------- TOKEN ESTIMATION ----------
+    const tokenData = this.estimateTokensFromPdfSession(input);
 
-  // ---------- TIME ESTIMATION ----------
-  const parseTimeMs =
-    metrics.total_pages *
-    PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
+    // ---------- TIME ESTIMATION ----------
+    const parseTimeMs =
+      metrics.total_pages * PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
 
-  const chunksCount = Math.ceil(
-    tokenData.breakdown.extractionPromptTokens /
-    input.chunkSizeTokens
-  );
+    const chunksCount = Math.ceil(
+      tokenData.breakdown.extractionPromptTokens / input.chunkSizeTokens,
+    );
 
-  const contextTimeMs =
-    PERFORMANCE_CONSTANTS.CONTEXT_DETECTION_MS;
+    const contextTimeMs = PERFORMANCE_CONSTANTS.CONTEXT_DETECTION_MS;
 
-  const extractionTimeMs =
-    chunksCount *
-    PERFORMANCE_CONSTANTS.EXTRACTION_MS_PER_CHUNK;
+    const extractionTimeMs =
+      chunksCount * PERFORMANCE_CONSTANTS.EXTRACTION_MS_PER_CHUNK;
 
-  const narrativeTimeMs = input.narrativeEnabled
-    ? PERFORMANCE_CONSTANTS.NARRATIVE_MS
-    : 0;
+    const narrativeTimeMs = input.narrativeEnabled
+      ? PERFORMANCE_CONSTANTS.NARRATIVE_MS
+      : 0;
 
-  const totalTimeMs =
-    (parseTimeMs +
-      contextTimeMs +
-      extractionTimeMs +
-      narrativeTimeMs) *
-    PERFORMANCE_CONSTANTS.TIME_SAFETY_MULTIPLIER;
+    const totalTimeMs =
+      (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
+      PERFORMANCE_CONSTANTS.TIME_SAFETY_MULTIPLIER;
 
-  return {
-    tokensExpected: tokenData.productTokensExpected,
-    timeSecondsExpected: Math.ceil(totalTimeMs / 1000),
-    breakdown: {
-      ...tokenData.breakdown,
-      parseTimeMs,
-      contextTimeMs,
-      extractionTimeMs,
-      narrativeTimeMs,
-      chunks: chunksCount,
-    }
+    return {
+      tokensExpected: tokenData.productTokensExpected,
+      timeSecondsExpected: Math.ceil(totalTimeMs / 1000),
+      breakdown: {
+        ...tokenData.breakdown,
+        parseTimeMs,
+        contextTimeMs,
+        extractionTimeMs,
+        narrativeTimeMs,
+        chunks: chunksCount,
+      },
+    };
   };
-};
 
+  protected BASE_CONTEXT_PROMPT_LENGTH = 1000;
 
-  protected BASE_CONTEXT_PROMPT = `
-You are a deterministic financial transaction extraction engine
-specialized in Indian bank and credit card statements.
-
-Your responsibility is to extract factual transaction data
-exactly as it appears in statement text.
-
-You must be conservative, literal, and precise.
-You must avoid assumptions and never infer information
-that is not explicitly present.
-
-========================
-CORE PRINCIPLES
-========================
-- Extract only what is present in the text
-- Never hallucinate transactions
-- Never reinterpret transaction meaning
-- Never guess account ownership
-- Never calculate totals or summaries
-- If unsure, return null or false
-
-========================
-TRANSACTION DEFINITIONS
-========================
-- amount: ALWAYS positive
-- inflow: credits, deposits, refunds
-- outflow: debits, spends, withdrawals
-
-========================
-INTERNAL TRANSFER DEFINITION
-========================
-Internal transfer = money moved between TWO accounts
-owned by the SAME user.
-
-Mark as internal transfer ONLY when ownership of both sides
-is explicitly clear.
-
-NEVER mark internal transfer for:
-- Merchant payments
-- Investments (stocks, mutual funds, SIPs, IPOs)
-- Payments to individuals
-- Food, transport, shopping, healthcare, subscriptions
-- Any ambiguous case
-
-When in doubt → false.
-
-========================
-RECURRING TRANSACTION SIGNALS
-========================
-You do NOT confirm subscriptions.
-You only flag possible recurring behavior.
-
-Recurring candidates ONLY when:
-- Explicit mandate terms (SI, AUTO DEBIT, E-MANDATE, NACH)
-- Known recurring service merchants
-
-One-time purchases are still candidates, NOT confirmations.
-Investments are NEVER recurring subscriptions.
-
-========================
-CARD & PAYMENT RULES
-========================
-- Debit card transactions belong to bank accounts
-- Credit card transactions belong ONLY to credit card accounts
-- POS or card transactions without explicit credit card context
-  MUST be treated as bank transactions
-- Standing Instructions from debit cards are NOT credit card spends
-
-========================
-OUTPUT RULES
-========================
-- Output ONLY valid JSON
-- Match the requested schema EXACTLY
-- Do not add extra keys
-- Do not add explanations
-`;
+  protected now = () => process.hrtime.bigint();
+  protected ms = (start: bigint, end: bigint): number => {
+    return Number(end - start) / 1_000_000;
+  }
 }

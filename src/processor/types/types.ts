@@ -134,6 +134,7 @@ export type IUpdateAnalysisSessionBySessionIdReqObj = {
   error_message?: string;
   tokens_used?: number;
   updated_at?: string;
+  meta_data?: any;
 }
 
 export type IFetchTransactionsReqObj = {

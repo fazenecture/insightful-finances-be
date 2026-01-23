@@ -19,13 +19,22 @@ export default class ProcessorService extends ProcessorHelper {
    * - allow partial progress persistence
    */
   public processPdfBatch = async (
-    input: ProcessPdfBatchInput
+    input: ProcessPdfBatchInput,
   ): Promise<void> => {
     const { userId, accountId, pdfKeys } = input;
 
     /**
      * Analysis Session
      */
+    const startedAt = moment().toISOString();
+    const t0 = this.now();
+
+    let totalTokensUsed = 0;
+
+    let pdfProcessingMs = 0;
+    let analysisMs = 0;
+    let narrativeMs = 0;
+    let dbWriteMs = 0;
 
     await this.insertAnalysisSessionDb([
       {
@@ -38,17 +47,24 @@ export default class ProcessorService extends ProcessorHelper {
       },
     ]);
 
+    const pdfStart = this.now();
+
     // 1. Process each PDF independently
     for (const s3Key of pdfKeys) {
-      await this.processSinglePdf({
+      const tokensUsed = await this.processSinglePdf({
         userId,
         accountId,
         s3Key,
         sessionId: input?.sessionId,
       });
+
+      totalTokensUsed += tokensUsed.productTokensExpected;
     }
 
+    pdfProcessingMs = this.ms(pdfStart, this.now());
+
     // 2. Fetch canonical ledger (all transactions)
+    const analysisStart = this.now();
     const allTransactions = await this.fetchTransactionsByUser({
       userId,
     });
@@ -56,13 +72,21 @@ export default class ProcessorService extends ProcessorHelper {
     // 3. Run deterministic financial analysis
     const analysisSnapshot = this.runFullAnalysis(allTransactions);
 
+    analysisMs = this.ms(analysisStart, this.now());
+
+    // 3️⃣ Persist snapshot
+    const dbStart = this.now();
+
     // 4. Persist computed metrics
     await this.persistAnalysisSnapshot({
       userId,
       snapshot: analysisSnapshot,
     });
 
+    dbWriteMs += this.ms(dbStart, this.now());
+
     // 5. Generate read-only AI narrative
+    const narrativeStart = this.now();
     const narrative = await this.generateNarrativeSnapshot({
       userId,
       snapshot: analysisSnapshot,
@@ -71,18 +95,40 @@ export default class ProcessorService extends ProcessorHelper {
 
     console.log("narrative: ", narrative);
 
+    narrativeMs = this.ms(narrativeStart, this.now());
+
+    const completedAt = moment().toISOString();
+    const totalDurationMs = this.ms(t0, this.now());
+
+    const metaData = {
+      pdf_count: pdfKeys.length,
+      total_transactions: allTransactions.length,
+      metric: {
+        started_at: startedAt,
+        completed_at: completedAt,
+        total_duration_ms: Math.round(totalDurationMs),
+        breakdown: {
+          analysis_ms: Math.round(analysisMs),
+          narrative_ms: Math.round(narrativeMs),
+          db_write_ms: Math.round(dbWriteMs),
+          pdf_processing_ms: Math.round(pdfProcessingMs),
+        },
+      },
+    };
+
     await this.updateAnalysisSessionStatusBySessionIdDb({
       session_id: input?.sessionId!,
       status: AnalysisStatus.COMPLETED,
-      tokens_used: input?.tokensEstimate,
+      tokens_used: totalTokensUsed,
       updated_at: moment().format(),
+      meta_data: metaData,
     });
 
     return narrative;
   };
 
   public fetchAnalysisDataService = async (
-    reqObj: IFetchAnalysisDataServiceReqObj
+    reqObj: IFetchAnalysisDataServiceReqObj,
   ) => {
     const { user_id, session_id } = reqObj;
 
@@ -113,11 +159,10 @@ export default class ProcessorService extends ProcessorHelper {
       const tokenData = this.estimateTokensFromPdfSession({
         pages,
         chunkSizeTokens: MAX_TOKENS_PER_CHUNK,
-        baseContextPrompt: this.BASE_CONTEXT_PROMPT,
+        baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
         extractionPromptOverheadTokens: 900, // static prompt size
         narrativeEnabled: true,
       });
-      console.log("tokenData: ", tokenData);
 
       totalTokens += tokenData.productTokensExpected;
     }
