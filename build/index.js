@@ -53,9 +53,9 @@ const cors_1 = __importDefault(require("cors"));
 const index_router_1 = __importDefault(require("./routes/index.router"));
 const app = (0, express_1.default)();
 const allowedOrigins = [
-    "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app/",
+    "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app",
     "http://localhost:8080",
-    "https://finance-insight-alpha.vercel.app/",
+    "https://finance-insight-alpha.vercel.app",
 ];
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
