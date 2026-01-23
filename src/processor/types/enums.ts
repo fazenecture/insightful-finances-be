@@ -52,17 +52,17 @@ export const PERFORMANCE_CONSTANTS = {
   PDF_PARSE_MS_PER_PAGE: 150,        // conservative avg
 
   // LLM calls (measured averages)
-  CONTEXT_DETECTION_MS: 2600,        // first page
-  EXTRACTION_MS_PER_CHUNK: 3000,     // per chunk
+  CONTEXT_DETECTION_MS: 2800,        // first page
+  EXTRACTION_MS_PER_CHUNK: 3200,     // per chunk
   NARRATIVE_MS: 14000,                // bounded
 
   // Parallelism assumptions
   MAX_PARALLEL_CHUNKS: 6,            // sequential (safe)
   
   // Safety buffer
-  TIME_SAFETY_MULTIPLIER: 2,
+  TIME_SAFETY_MULTIPLIER: 3,
 
-  BASE_TIME_SAFETY: 1.25,
+  BASE_TIME_SAFETY: 2,
 };
 
 export const TOKENS_PER_PAGE_ESTIMATE = 10000;

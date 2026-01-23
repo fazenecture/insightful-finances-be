@@ -366,7 +366,7 @@ class ProcessorHelper extends db_1.default {
                 ? enums_1.PERFORMANCE_CONSTANTS.NARRATIVE_MS
                 : 0;
             const SMALL_PDF_PENALTY = metrics.total_pages <= 3 ? 1.3 : 1;
-            const MULTI_PDF_PENALTY = input.isBatch ? 1.15 : 1;
+            const MULTI_PDF_PENALTY = input.isBatch ? 1.6 : 1;
             const totalTimeMs = (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
                 enums_1.PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
                 SMALL_PDF_PENALTY *
