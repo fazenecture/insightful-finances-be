@@ -58,16 +58,18 @@ exports.LLM_TOKENS_PER_PRODUCT_TOKEN = 1000; // 1:1 mapping
 exports.NARRATIVE_TOKENS = 1500; // fixed overhead for narrative generation
 exports.PERFORMANCE_CONSTANTS = {
     // PDF processing
-    PDF_PARSE_MS_PER_PAGE: 150, // conservative avg
+    PDF_PARSE_MS_PER_PAGE: 120, // conservative avg
     // LLM calls (measured averages)
     CONTEXT_DETECTION_MS: 2800, // first page
-    EXTRACTION_MS_PER_CHUNK: 3200, // per chunk
+    EXTRACTION_MS_PER_CHUNK: 3000, // per chunk
     NARRATIVE_MS: 14000, // bounded
     // Parallelism assumptions
-    MAX_PARALLEL_CHUNKS: 6, // sequential (safe)
+    MAX_PARALLEL_CHUNKS: 9, // sequential (safe)
     // Safety buffer
     TIME_SAFETY_MULTIPLIER: 3,
-    BASE_TIME_SAFETY: 1.5,
+    BASE_TIME_SAFETY: 1.35,
+    OPENAI_TPM_LIMIT: 30000, // org limit
+    COOLDOWN_BUFFER_SECONDS: 5, // seconds
 };
 exports.TOKENS_PER_PAGE_ESTIMATE = 10000;
 //# sourceMappingURL=enums.js.map

@@ -42,7 +42,6 @@ export default class ProcessorHelper extends ProcessorDB {
   protected s3: S3Service;
   sseManager: SSEManager;
 
-
   constructor() {
     super();
     this.llm = new ProcessorLLM();
@@ -587,11 +586,16 @@ export default class ProcessorHelper extends ProcessorDB {
     const SMALL_PDF_PENALTY = metrics.total_pages <= 3 ? 1.3 : 1;
     const MULTI_PDF_PENALTY = input.isBatch ? 1.35 : 1;
 
+    const cooldownSeconds = this.estimateRateLimitCooldownSeconds(
+      tokenData.productTokensExpected,
+      PERFORMANCE_CONSTANTS.OPENAI_TPM_LIMIT,
+    );
+
     const totalTimeMs =
       (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
       PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
       SMALL_PDF_PENALTY *
-      MULTI_PDF_PENALTY;
+      MULTI_PDF_PENALTY + (cooldownSeconds * 1000);
 
     const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
 
@@ -618,6 +622,7 @@ export default class ProcessorHelper extends ProcessorDB {
         contextTimeMs,
         extractionTimeMs,
         narrativeTimeMs,
+        estimatedCooldownSeconds: cooldownSeconds,
       },
     };
   };
@@ -628,5 +633,17 @@ export default class ProcessorHelper extends ProcessorDB {
 
   protected ms = (start: bigint, end: bigint): number => {
     return Number(end - start) / 1_000_000;
+  };
+
+  protected estimateRateLimitCooldownSeconds = (
+    tokensExpected: number,
+    tpmLimit: number,
+  ): number => {
+    if (tokensExpected <= tpmLimit) return 0;
+
+    const windows = Math.ceil(tokensExpected / tpmLimit) - 1;
+
+    // Each extra window forces a wait of ~60s
+    return windows * 60;
   };
 }

@@ -369,10 +369,11 @@ class ProcessorHelper extends db_1.default {
                 : 0;
             const SMALL_PDF_PENALTY = metrics.total_pages <= 3 ? 1.3 : 1;
             const MULTI_PDF_PENALTY = input.isBatch ? 1.35 : 1;
+            const cooldownSeconds = this.estimateRateLimitCooldownSeconds(tokenData.productTokensExpected, enums_1.PERFORMANCE_CONSTANTS.OPENAI_TPM_LIMIT);
             const totalTimeMs = (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
                 enums_1.PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
                 SMALL_PDF_PENALTY *
-                MULTI_PDF_PENALTY;
+                MULTI_PDF_PENALTY + (cooldownSeconds * 1000);
             const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
             const timeSecondsExpected = Math.max(Math.ceil(totalTimeMs / 1000), MIN_SECONDS);
             return {
@@ -387,13 +388,20 @@ class ProcessorHelper extends db_1.default {
                     estimatedPdfTokens, chunks: chunksCount, parseTimeMs,
                     contextTimeMs,
                     extractionTimeMs,
-                    narrativeTimeMs }),
+                    narrativeTimeMs, estimatedCooldownSeconds: cooldownSeconds }),
             };
         };
         this.BASE_CONTEXT_PROMPT_LENGTH = 2000;
         this.now = () => process.hrtime.bigint();
         this.ms = (start, end) => {
             return Number(end - start) / 1000000;
+        };
+        this.estimateRateLimitCooldownSeconds = (tokensExpected, tpmLimit) => {
+            if (tokensExpected <= tpmLimit)
+                return 0;
+            const windows = Math.ceil(tokensExpected / tpmLimit) - 1;
+            // Each extra window forces a wait of ~60s
+            return windows * 60;
         };
         this.llm = new llm_1.default();
         this.analysis = new analysis_1.default();
