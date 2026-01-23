@@ -11,6 +11,7 @@ import { AnalysisStatus } from "./types/enums";
 import moment from "moment";
 import ErrorHandler from "../helper/error.handler";
 import logger from "../helper/logger";
+import { formatDurationRange } from "../helper/time.formatter";
 
 export default class ProcessorService extends ProcessorHelper {
   /**
@@ -218,7 +219,7 @@ export default class ProcessorService extends ProcessorHelper {
       total_time_estimate: {
         min_seconds: totalMinimumTimeSeconds,
         max_seconds: totalMaximumTimeSeconds,
-        display: `${totalMinimumTimeSeconds}-${totalMaximumTimeSeconds} sec`,
+        display: formatDurationRange(totalMinimumTimeSeconds, totalMaximumTimeSeconds),
       },
     };
   };

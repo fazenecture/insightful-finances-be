@@ -19,6 +19,7 @@ const helper_1 = __importDefault(require("./helper"));
 const enums_1 = require("./types/enums");
 const moment_1 = __importDefault(require("moment"));
 const error_handler_1 = __importDefault(require("../helper/error.handler"));
+const time_formatter_1 = require("../helper/time.formatter");
 class ProcessorService extends helper_1.default {
     constructor() {
         /**
@@ -178,7 +179,7 @@ class ProcessorService extends helper_1.default {
                 total_time_estimate: {
                     min_seconds: totalMinimumTimeSeconds,
                     max_seconds: totalMaximumTimeSeconds,
-                    display: `${totalMinimumTimeSeconds}-${totalMaximumTimeSeconds} sec`,
+                    display: (0, time_formatter_1.formatDurationRange)(totalMinimumTimeSeconds, totalMaximumTimeSeconds),
                 },
             };
         });

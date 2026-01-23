@@ -33,6 +33,7 @@ import {
   TOKENS_PER_PAGE_ESTIMATE,
 } from "./types/enums";
 import { token } from "morgan";
+import { callWithRateLimitRetry } from "../helper/api.retry";
 
 export default class ProcessorHelper extends ProcessorDB {
   protected llm: ProcessorLLM;
@@ -69,9 +70,11 @@ export default class ProcessorHelper extends ProcessorDB {
 
     const limit = pLimit(10); // tune: 6–12 is safe
 
-    const context = await this.llm.detectStatementContext({
-      firstPageText: pages[0].text as any,
-    });
+    const context = await callWithRateLimitRetry(() =>
+      this.llm.detectStatementContext({
+        firstPageText: pages[0].text as any,
+      }),
+    );
 
     // 2. Token-based chunking
     const pagesWithRows = pages.map((p, idx) => ({
@@ -102,13 +105,15 @@ export default class ProcessorHelper extends ProcessorDB {
             } (pages: ${chunk.pages.join(",")})`,
           );
 
-          let txns = await this.llm.extractAndEnrichTransactions({
-            userId,
-            accountId: accountIdData,
-            pageText: chunk.text,
-            accountContext: context,
-            sessionId: input?.sessionId,
-          });
+          let txns = await callWithRateLimitRetry(() =>
+            this.llm.extractAndEnrichTransactions({
+              userId,
+              accountId: accountIdData,
+              pageText: chunk.text,
+              accountContext: context,
+              sessionId: input?.sessionId,
+            }),
+          );
 
           txns = this.detectInternalTransfers({ transactions: txns });
 
@@ -432,7 +437,9 @@ export default class ProcessorHelper extends ProcessorDB {
   protected generateNarrativeSnapshot = async (
     input: GenerateNarrativeInput,
   ): Promise<void> => {
-    const narrative = await this.llm.generateNarrative(input);
+    const narrative = await callWithRateLimitRetry(() =>
+      this.llm.generateNarrative(input),
+    );
 
     await this.saveNarrative({
       userId: input.userId,
