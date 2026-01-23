@@ -23,6 +23,7 @@ const p_limit_1 = __importDefault(require("p-limit"));
 const token_chunker_1 = require("../helper/token.chunker");
 const node_crypto_1 = require("node:crypto");
 const enums_1 = require("./types/enums");
+const api_retry_1 = require("../helper/api.retry");
 class ProcessorHelper extends db_1.default {
     constructor() {
         super();
@@ -44,9 +45,9 @@ class ProcessorHelper extends db_1.default {
                 narrativeEnabled: true,
             });
             const limit = (0, p_limit_1.default)(10); // tune: 6–12 is safe
-            const context = yield this.llm.detectStatementContext({
+            const context = yield (0, api_retry_1.callWithRateLimitRetry)(() => this.llm.detectStatementContext({
                 firstPageText: pages[0].text,
-            });
+            }));
             // 2. Token-based chunking
             const pagesWithRows = pages.map((p, idx) => ({
                 pageNumber: idx + 1,
@@ -61,13 +62,13 @@ class ProcessorHelper extends db_1.default {
             ].join("-");
             yield Promise.all(chunks.map((chunk, index) => limit(() => __awaiter(this, void 0, void 0, function* () {
                 console.log(`Processing chunk ${index + 1}/${chunks.length} (pages: ${chunk.pages.join(",")})`);
-                let txns = yield this.llm.extractAndEnrichTransactions({
+                let txns = yield (0, api_retry_1.callWithRateLimitRetry)(() => this.llm.extractAndEnrichTransactions({
                     userId,
                     accountId: accountIdData,
                     pageText: chunk.text,
                     accountContext: context,
                     sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
-                });
+                }));
                 txns = this.detectInternalTransfers({ transactions: txns });
                 if (txns.length) {
                     yield this.insertBulkTransactions({ transactions: txns });
@@ -288,7 +289,7 @@ class ProcessorHelper extends db_1.default {
         };
         this.average = (values) => values.reduce((a, b) => a + b, 0) / values.length;
         this.generateNarrativeSnapshot = (input) => __awaiter(this, void 0, void 0, function* () {
-            const narrative = yield this.llm.generateNarrative(input);
+            const narrative = yield (0, api_retry_1.callWithRateLimitRetry)(() => this.llm.generateNarrative(input));
             yield this.saveNarrative({
                 userId: input.userId,
                 narrative,
