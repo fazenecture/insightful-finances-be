@@ -25,6 +25,11 @@ export default class ProcessorService extends ProcessorHelper {
   ): Promise<void> => {
     const { userId, accountId, pdfKeys } = input;
 
+    // a fail check
+    if (!input?.sessionId) {
+      input.sessionId = `pdf-batch-${randomUUID()}`;
+    }
+
     /**
      * Analysis Session
      */
@@ -38,7 +43,16 @@ export default class ProcessorService extends ProcessorHelper {
     let narrativeMs = 0;
     let dbWriteMs = 0;
 
-    const sessionCheck = await this.insertAnalysisSessionDb([
+    const sessionData = await this.fetchAnalysisSessionBySessionIdDb(input?.sessionId!);
+
+    if (sessionData?.status.length) {
+      throw new ErrorHandler({
+        status_code: 400,
+        message: `Analysis session with already in ${sessionData.status} status!`,
+      })
+    }
+
+    await this.insertAnalysisSessionDb([
       {
         session_id: input?.sessionId,
         user_id: userId,
@@ -48,18 +62,6 @@ export default class ProcessorService extends ProcessorHelper {
         tokens_expected: input?.tokensEstimate ?? 0,
       },
     ]);
-
-    for (const session of sessionCheck) {
-      if (!session.is_new) {
-        logger.warn(
-          `Analysis session with ID ${session.session_id} already exists.`,
-        );
-        throw new ErrorHandler({
-          status_code: 400,
-          message: `Analysis for this session is already in ${session.status} state.`,
-        });
-      }
-    }
 
     const pdfStart = this.now();
 

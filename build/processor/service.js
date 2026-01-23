@@ -12,12 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// processor/service.ts
+const node_crypto_1 = require("node:crypto");
 const token_chunker_1 = require("../helper/token.chunker");
 const helper_1 = __importDefault(require("./helper"));
 const enums_1 = require("./types/enums");
 const moment_1 = __importDefault(require("moment"));
 const error_handler_1 = __importDefault(require("../helper/error.handler"));
-const logger_1 = __importDefault(require("../helper/logger"));
 class ProcessorService extends helper_1.default {
     constructor() {
         super(...arguments);
@@ -31,6 +32,10 @@ class ProcessorService extends helper_1.default {
         this.processPdfBatch = (input) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const { userId, accountId, pdfKeys } = input;
+            // a fail check
+            if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
+                input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
+            }
             /**
              * Analysis Session
              */
@@ -41,7 +46,14 @@ class ProcessorService extends helper_1.default {
             let analysisMs = 0;
             let narrativeMs = 0;
             let dbWriteMs = 0;
-            const sessionCheck = yield this.insertAnalysisSessionDb([
+            const sessionData = yield this.fetchAnalysisSessionBySessionIdDb(input === null || input === void 0 ? void 0 : input.sessionId);
+            if (sessionData === null || sessionData === void 0 ? void 0 : sessionData.status.length) {
+                throw new error_handler_1.default({
+                    status_code: 400,
+                    message: `Analysis session with already in ${sessionData.status} status!`,
+                });
+            }
+            yield this.insertAnalysisSessionDb([
                 {
                     session_id: input === null || input === void 0 ? void 0 : input.sessionId,
                     user_id: userId,
@@ -51,15 +63,6 @@ class ProcessorService extends helper_1.default {
                     tokens_expected: (_a = input === null || input === void 0 ? void 0 : input.tokensEstimate) !== null && _a !== void 0 ? _a : 0,
                 },
             ]);
-            for (const session of sessionCheck) {
-                if (!session.is_new) {
-                    logger_1.default.warn(`Analysis session with ID ${session.session_id} already exists.`);
-                    throw new error_handler_1.default({
-                        status_code: 400,
-                        message: `Analysis for this session is already in ${session.status} state.`,
-                    });
-                }
-            }
             const pdfStart = this.now();
             // 1. Process each PDF independently
             for (const s3Key of pdfKeys) {

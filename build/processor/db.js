@@ -155,20 +155,25 @@ class ProcessorDB {
             return rows[0];
         });
         this.insertAnalysisSessionDb = (obj) => __awaiter(this, void 0, void 0, function* () {
-            if (obj.length === 0)
-                return [];
-            const query = postgres_1.default.format(`
-    INSERT INTO analysis_sessions ?
-    ON CONFLICT (session_id)
-    DO UPDATE SET
-      session_id = analysis_sessions.session_id -- no-op update
-    RETURNING
-      session_id,
-      status,
-      (xmax = 0) AS is_new
-    `, obj);
-            const { rows } = yield postgres_1.default.query(query);
-            return rows;
+            if (obj.length === 0) {
+                return;
+            }
+            const query = postgres_1.default.format(`INSERT INTO analysis_sessions ? `, obj);
+            yield postgres_1.default.query(query);
+        });
+        this.fetchAnalysisSessionBySessionIdDb = (session_id) => __awaiter(this, void 0, void 0, function* () {
+            const query = `
+      SELECT id, status, session_id FROM
+        analysis_sessions
+      WHERE 
+        session_id = $1
+      LIMIT 1;
+    `;
+            const { rows } = yield postgres_1.default.query(query, [session_id]);
+            if (rows.length === 0) {
+                return null;
+            }
+            return rows[0];
         });
         this.updateAnalysisSessionStatusBySessionIdDb = (obj) => __awaiter(this, void 0, void 0, function* () {
             const { session_id } = obj, rest = __rest(obj, ["session_id"]);
