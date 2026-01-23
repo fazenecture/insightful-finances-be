@@ -14,25 +14,82 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const custom_error_1 = __importDefault(require("../helper/custom.error"));
 const service_1 = __importDefault(require("./service"));
+const enums_1 = require("./types/enums");
+const moment_1 = __importDefault(require("moment"));
 class ProcessorController extends service_1.default {
     constructor() {
         super(...arguments);
         this.execute = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            const { user_id, account_id, pdf_keys, session_id } = req.body;
             try {
-                const { user_id, account_id, pdf_keys } = req.body;
                 yield this.processPdfBatch({
                     userId: user_id,
                     accountId: account_id,
-                    pdfKeys: pdf_keys
+                    pdfKeys: pdf_keys,
+                    sessionId: session_id,
                 });
                 res.status(200).json({ message: "PDF batch processing initiated." });
+            }
+            catch (error) {
+                this.updateAnalysisSessionStatusBySessionIdDb({
+                    session_id,
+                    status: enums_1.AnalysisStatus.FAILED,
+                    tokens_used: 0,
+                    error_message: error === null || error === void 0 ? void 0 : error.message,
+                    updated_at: (0, moment_1.default)().format(),
+                });
+                (0, custom_error_1.default)(res, error);
+            }
+        });
+        this.fetchAnalysisDataController = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { id: session_id } = req.params, { user_id } = req.body;
+                const data = yield this.fetchAnalysisDataService({ user_id, session_id });
+                return res.status(200).send({
+                    success: true,
+                    data,
+                });
             }
             catch (error) {
                 (0, custom_error_1.default)(res, error);
             }
         });
-        this.fetchAnalysisDataController = () => __awaiter(this, void 0, void 0, function* () {
-            // 
+        this.fetchTokenEstimateController = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { user_id, pdf_keys, session_id } = req.body;
+                const data = yield this.fetchTokenEstimateService({
+                    userId: user_id,
+                    accountId: session_id,
+                    pdfKeys: pdf_keys,
+                    sessionId: session_id,
+                });
+                return res.status(200).send({
+                    success: true,
+                    data,
+                });
+            }
+            catch (error) {
+                (0, custom_error_1.default)(res, error);
+            }
+        });
+        this.fetchTransactionsController = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { limit, page, search } = req.query, { session_id } = req.params;
+                const { meta_data, data } = yield this.fetchTransactionsService({
+                    limit: limit ? Number.parseInt(limit.toString()) : 10,
+                    page: page ? Number.parseInt(page === null || page === void 0 ? void 0 : page.toString()) : 0,
+                    search: (search === null || search === void 0 ? void 0 : search.length) ? search.toString() : null,
+                    session_id,
+                });
+                return res.status(200).send({
+                    success: true,
+                    meta_data,
+                    data,
+                });
+            }
+            catch (error) {
+                (0, custom_error_1.default)(res, error);
+            }
         });
     }
 }

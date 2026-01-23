@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Currency = exports.Category = exports.TransactionSource = exports.TransactionDirection = void 0;
+exports.PERFORMANCE_CONSTANTS = exports.NARRATIVE_TOKENS = exports.LLM_TOKENS_PER_PRODUCT_TOKEN = exports.SAFETY_MULTIPLIER = exports.COMPLETION_RATIO = exports.CHARS_PER_TOKEN = exports.AnalysisStatus = exports.Currency = exports.Category = exports.TransactionSource = exports.TransactionDirection = void 0;
 var TransactionDirection;
 (function (TransactionDirection) {
     TransactionDirection["INFLOW"] = "inflow";
@@ -36,4 +36,28 @@ var Currency;
     Currency["GBP"] = "GBP";
     Currency["JPY"] = "JPY";
 })(Currency || (exports.Currency = Currency = {}));
+var AnalysisStatus;
+(function (AnalysisStatus) {
+    AnalysisStatus["PENDING"] = "pending";
+    AnalysisStatus["IN_PROGRESS"] = "in_progress";
+    AnalysisStatus["COMPLETED"] = "completed";
+    AnalysisStatus["FAILED"] = "failed";
+})(AnalysisStatus || (exports.AnalysisStatus = AnalysisStatus = {}));
+exports.CHARS_PER_TOKEN = 4; // OpenAI average
+exports.COMPLETION_RATIO = 0.35; // JSON output
+exports.SAFETY_MULTIPLIER = 1.2; // retries + variance
+exports.LLM_TOKENS_PER_PRODUCT_TOKEN = 1000; // 1:1 mapping
+exports.NARRATIVE_TOKENS = 1500; // fixed overhead for narrative generation
+exports.PERFORMANCE_CONSTANTS = {
+    // PDF processing
+    PDF_PARSE_MS_PER_PAGE: 120, // conservative avg
+    // LLM calls (measured averages)
+    CONTEXT_DETECTION_MS: 1800, // first page
+    EXTRACTION_MS_PER_CHUNK: 2200, // per chunk
+    NARRATIVE_MS: 2500, // bounded
+    // Parallelism assumptions
+    MAX_PARALLEL_CHUNKS: 1, // sequential (safe)
+    // Safety buffer
+    TIME_SAFETY_MULTIPLIER: 1.25
+};
 //# sourceMappingURL=enums.js.map

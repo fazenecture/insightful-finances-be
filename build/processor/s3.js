@@ -46,13 +46,13 @@ class S3Service {
                 secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || ""
             }
         });
-        if (!process.env.AWS_S3_BUCKET) {
+        if (!process.env.S3_BUCKET) {
             throw new error_handler_1.default({
                 status_code: 500,
                 message: "AWS_S3_BUCKET is not defined"
             });
         }
-        this.defaultBucket = process.env.AWS_S3_BUCKET;
+        this.defaultBucket = process.env.S3_BUCKET;
     }
 }
 exports.default = S3Service;

@@ -28,6 +28,7 @@ import {
   COMPLETION_RATIO,
   LLM_TOKENS_PER_PRODUCT_TOKEN,
   NARRATIVE_TOKENS,
+  PERFORMANCE_CONSTANTS,
   SAFETY_MULTIPLIER,
 } from "./types/enums";
 
@@ -517,6 +518,65 @@ export default class ProcessorHelper extends ProcessorDB {
       },
     };
   };
+
+  protected estimateTokensAndTimeFromPdfSession = (input: {
+  pages: PageTextResult[];
+  chunkSizeTokens: number;
+  baseContextPrompt: string;
+  extractionPromptOverheadTokens: number;
+  narrativeEnabled?: boolean;
+}): {
+  tokensExpected: number;
+  timeSecondsExpected: number;
+  breakdown: Record<string, number>;
+} => {
+  const metrics = this.computePdfMetrics(input.pages);
+
+  // ---------- TOKEN ESTIMATION ----------
+  const tokenData = this.estimateTokensFromPdfSession(input);
+
+  // ---------- TIME ESTIMATION ----------
+  const parseTimeMs =
+    metrics.total_pages *
+    PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
+
+  const chunksCount = Math.ceil(
+    tokenData.breakdown.extractionPromptTokens /
+    input.chunkSizeTokens
+  );
+
+  const contextTimeMs =
+    PERFORMANCE_CONSTANTS.CONTEXT_DETECTION_MS;
+
+  const extractionTimeMs =
+    chunksCount *
+    PERFORMANCE_CONSTANTS.EXTRACTION_MS_PER_CHUNK;
+
+  const narrativeTimeMs = input.narrativeEnabled
+    ? PERFORMANCE_CONSTANTS.NARRATIVE_MS
+    : 0;
+
+  const totalTimeMs =
+    (parseTimeMs +
+      contextTimeMs +
+      extractionTimeMs +
+      narrativeTimeMs) *
+    PERFORMANCE_CONSTANTS.TIME_SAFETY_MULTIPLIER;
+
+  return {
+    tokensExpected: tokenData.productTokensExpected,
+    timeSecondsExpected: Math.ceil(totalTimeMs / 1000),
+    breakdown: {
+      ...tokenData.breakdown,
+      parseTimeMs,
+      contextTimeMs,
+      extractionTimeMs,
+      narrativeTimeMs,
+      chunks: chunksCount,
+    }
+  };
+};
+
 
   protected BASE_CONTEXT_PROMPT = `
 You are a deterministic financial transaction extraction engine

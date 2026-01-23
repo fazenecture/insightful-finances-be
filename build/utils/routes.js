@@ -8,6 +8,6 @@ const controller_1 = __importDefault(require("../utils/controller"));
 const router = (0, express_1.Router)();
 const { generatePreSignedUploadUrlController } = new controller_1.default();
 // presigned upload url
-router.get("/upload", generatePreSignedUploadUrlController);
+router.post("/upload", generatePreSignedUploadUrlController);
 exports.default = router;
 //# sourceMappingURL=routes.js.map

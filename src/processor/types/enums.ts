@@ -46,3 +46,19 @@ export const COMPLETION_RATIO = 0.35;      // JSON output
 export const SAFETY_MULTIPLIER = 1.2;      // retries + variance
 export const LLM_TOKENS_PER_PRODUCT_TOKEN = 1000; // 1:1 mapping
 export const NARRATIVE_TOKENS = 1500;      // fixed overhead for narrative generation
+
+export const PERFORMANCE_CONSTANTS = {
+  // PDF processing
+  PDF_PARSE_MS_PER_PAGE: 120,        // conservative avg
+
+  // LLM calls (measured averages)
+  CONTEXT_DETECTION_MS: 1800,        // first page
+  EXTRACTION_MS_PER_CHUNK: 2200,     // per chunk
+  NARRATIVE_MS: 2500,                // bounded
+
+  // Parallelism assumptions
+  MAX_PARALLEL_CHUNKS: 1,            // sequential (safe)
+  
+  // Safety buffer
+  TIME_SAFETY_MULTIPLIER: 1.25
+};

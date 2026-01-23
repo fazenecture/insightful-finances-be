@@ -53,14 +53,17 @@ const cors_1 = __importDefault(require("cors"));
 const index_router_1 = __importDefault(require("./routes/index.router"));
 const app = (0, express_1.default)();
 const allowedOrigins = [
-    "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app/"
+    "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app/",
+    "http://localhost:8080",
+    "https://finance-insight-alpha.vercel.app/",
 ];
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl)
-        // if (!origin) return callback(null, true);
-        // if (allowedOrigins.includes(origin)) {
-        if (true) {
+        console.log('origin: ', origin);
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
         else {

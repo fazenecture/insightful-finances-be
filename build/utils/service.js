@@ -34,7 +34,7 @@ class UtilsService extends helper_1.default {
             });
             return {
                 signed_url: signedUrl,
-                public_url: `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+                public_url: `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
                 key,
             };
         });

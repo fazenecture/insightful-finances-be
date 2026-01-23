@@ -20,6 +20,7 @@ class ProcessorLLM {
            TRANSACTION EXTRACTION
            ================================ */
         this.extractAndEnrichTransactions = (input) => __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
             const prompt = `
 You are a deterministic financial transaction extraction engine for Indian bank and credit card statements.
 
@@ -40,6 +41,7 @@ ACCOUNT CONTEXT (AUTHORITATIVE)
 - Account Type: ${input.accountContext.accountType}
 ${input.accountContext.bankName ? `- Bank Name: ${input.accountContext.bankName}` : ""}
 ${input.accountContext.cardLast4 ? `- Card Last 4 Digits: ${input.accountContext.cardLast4}` : ""}
+- HolderName: ${input.accountContext.holderName}
 
 RULE:
 - If Account Type is "credit_card", all card spends belong to a credit card.
@@ -80,6 +82,35 @@ CRITICAL DEFINITIONS
 INTERNAL TRANSFER:
 Money moved BETWEEN TWO ACCOUNTS OWNED BY THE SAME USER.
 Examples: savings → salary, bank → own wallet, self transfer.
+Transaction having notes like "moving to another account"
+
+========================
+INTERNAL TRANSFER OVERRIDE RULES (NON-NEGOTIABLE)
+========================
+
+If a transaction is classified as is_internal_transfer = true:
+
+- direction MUST be set based on statement sign ONLY
+  (do NOT reinterpret as income or expense)
+
+- category MUST be "personal_transfer"
+- subcategory MUST be "self_transfer"
+
+Internal transfers are NEVER:
+- income
+- expense
+- salary
+- investment
+
+Explicit internal transfer indicators:
+- RTGS / NEFT / IMPS
+- Counterparty name EXACTLY matches account holder name
+- Phrases like:
+  - "SELF"
+  - "OWN ACCOUNT"
+  - "MOVING FUNDS"
+  - "TRANSFER TO ANOTHER ACCOUNT"
+
 
 NOT INTERNAL TRANSFERS (NEVER mark as internal):
 - Payments to merchants (Zomato, Rapido, Amazon, Blinkit, Swiggy, Apple, etc.)
@@ -89,6 +120,34 @@ NOT INTERNAL TRANSFERS (NEVER mark as internal):
 - Any transaction where ownership of BOTH sides is not explicitly clear
 
 When in doubt, ALWAYS set is_internal_transfer = false.
+
+ACCOUNT HOLDER MATCH RULE (STRICT):
+
+If the counterparty name matches the HolderName
+(even partially, ignoring case and spacing),
+THEN treat it as a potential self-transfer.
+
+Example:
+HolderName: ${(_a = input === null || input === void 0 ? void 0 : input.accountContext) === null || _a === void 0 ? void 0 : _a.holderName}
+Counterparty: ${(_c = (_b = input === null || input === void 0 ? void 0 : input.accountContext) === null || _b === void 0 ? void 0 : _b.holderName) === null || _c === void 0 ? void 0 : _c.toUpperCase()}
+→ is_internal_transfer = true
+
+
+========================
+DIRECTION DEFINITION (CRITICAL)
+========================
+
+Direction represents USER CASHFLOW, not statement bookkeeping.
+
+For BANK accounts:
+- Credits → inflow
+- Debits → outflow
+
+For CREDIT CARD accounts:
+- Card spends → outflow
+- Refunds → inflow
+- Credit card bill payments ("PAYMENT RECEIVED", "THANK YOU") → outflow
+
 
 ========================
 RECURRING / SUBSCRIPTION SIGNALS (IMPORTANT)
@@ -144,7 +203,7 @@ NON-NEGOTIABLE RULES
   - "upi"
   - "bank"
   - "credit_card"
-- Categorization must be conservative
+- Categorization must be conservative (find it on the basis of transaction notes/merchant)
 - If unsure about category or subcategory, set it to null
 - DO NOT invent transactions
 - DO NOT merge or split transactions
@@ -160,6 +219,191 @@ CARD SOURCE RULES (IMPORTANT):
 - POS or card transactions without explicit credit card context
   MUST default to source = "bank"
 - Standing Instructions (SI) from debit cards are NOT credit card spends
+
+CREDIT CARD STATEMENT SPECIAL RULES (VERY IMPORTANT):
+
+- Credit Card bill payments ("PAYMENT RECEIVED", "THANK YOU")
+  MUST NOT be treated as income.
+
+If Account Type = "credit_card" AND transaction description indicates:
+- "PAYMENT RECEIVED"
+- "THANK YOU"
+- "CREDIT CARD PAYMENT"
+- "BILL PAYMENT"
+
+THEN:
+- direction = "inflow"
+- category = null
+- subcategory = null
+- confidence = 1.0
+
+These are balance settlements, NOT income.
+
+========================
+INCOME CATEGORIZATION RULES
+========================
+
+If direction = "inflow" AND description contains:
+- "SALARY"
+- "PAYROLL"
+- "MONTHLY SAL"
+- "CREDIT SALARY"
+- Employer name + fixed monthly pattern
+
+THEN:
+- category = "financial_services"
+- subcategory = "salary"
+- is_internal_transfer = false
+- confidence = 1.0
+
+========================
+INVESTMENT / DEMAT CATEGORIZATION
+========================
+
+If transaction involves:
+- Demat account
+- Broker
+- Mutual fund platform
+- Stock trading platform
+
+Examples:
+- Groww
+- Zerodha
+- Upstox
+- Angel One
+- ICICI Direct
+- Kuvera
+- Coin
+- NSE
+- BSE
+- "DEMAT"
+- "MF"
+- "SIP"
+
+THEN:
+- category = "financial_services"
+- subcategory = "investment"
+- is_internal_transfer = false
+
+========================
+RULE EVALUATION ORDER (MANDATORY)
+========================
+
+Apply rules in this exact order:
+
+1. Internal transfer detection
+2. Credit card special cases
+3. Income classification (salary)
+4. Investment classification
+5. Merchant-based categorization
+6. Fallback to null
+
+Once a rule applies, DO NOT override it later.
+
+
+========================
+ALLOWED CATEGORIES (STRICT)
+========================
+
+You MUST choose a category ONLY from the list below.
+If a transaction clearly matches one of these categories, you SHOULD assign it.
+If it does not clearly match any, set category = null.
+
+CATEGORIES:
+- food_and_dining
+- groceries
+- shopping
+- transport
+- fuel
+- travel
+- healthcare
+- entertainment
+- subscriptions
+- utilities
+- financial_services
+- personal_transfer
+- accommodation
+- education
+- others
+
+SUBCATEGORY RULES:
+- Subcategory is OPTIONAL
+- Use simple values like:
+  - "restaurant"
+  - "fast_food"
+  - "online_grocery"
+  - "fashion"
+  - "fuel_station"
+  - "flight"
+  - "hotel"
+- If unsure, set subcategory = null
+
+========================
+MERCHANT CATEGORIZATION RULES
+========================
+
+Use the merchant name and transaction description to categorize.
+
+Explicit mappings:
+
+FOOD & DINING:
+- Swiggy
+- Zomato
+- McDonalds
+- Restaurants, cafes, bars
+→ category = "food_and_dining"
+
+GROCERIES:
+- Blinkit
+- Zepto
+- BigBasket
+- Instamart
+→ category = "groceries"
+
+SHOPPING:
+- Amazon (non-flight, non-digital)
+- Myntra
+- Nykaa
+- Ajio
+- Arvind Fashions
+→ category = "shopping"
+
+TRAVEL:
+- Amazon Flights
+- IBIBO GROUP (Goibibo)
+→ category = "travel"
+  subcategory = "flight"
+
+FUEL:
+- Any merchant containing "FUELS", "PETROL", "FILLING STATION"
+→ category = "fuel"
+
+If multiple categories are possible:
+- Prefer the MOST COMMON consumer interpretation
+- Do NOT overthink
+
+========================
+CREDIT CARD BILL PAYMENT OVERRIDE (ABSOLUTE)
+========================
+
+If Account Type = "credit_card" AND transaction description contains:
+- "PAYMENT RECEIVED"
+- "THANK YOU"
+- "CREDIT CARD PAYMENT"
+- "BILL PAYMENT"
+
+THEN FORCE:
+- direction = "outflow"
+- category = null
+- subcategory = null
+- is_internal_transfer = false
+- is_recurring_candidate = false
+- recurring_signal = null
+- confidence = 1.0
+
+This represents the user paying the credit card bill.
+It is NEVER income or inflow.
+
 
 ========================
 CONFIDENCE SCORING
@@ -197,6 +441,7 @@ ${input.pageText}
                 subcategory: t.subcategory,
                 is_internal_transfer: t.is_internal_transfer,
                 currency: "INR",
+                session_id: input.sessionId,
                 // optional but VERY useful
                 confidence: t.confidence,
                 is_recurring_candidate: t.is_recurring_candidate,
@@ -273,26 +518,28 @@ ${input.firstPageText}
            ================================ */
         this.generateNarrative = (input) => __awaiter(this, void 0, void 0, function* () {
             const prompt = `
-      You are a deterministic financial analysis engine for an Indian personal finance application.
+        You are a deterministic financial analysis engine for an Indian personal finance application.
 
-      You are given a PRECOMPUTED financial analysis snapshot.
-      Your task is to STRUCTURE and INTERPRET this data into a UI-ready insight report.
+      You are given a PRECOMPUTED financial analysis SNAPSHOT.
+      Your task is to STRUCTURE and INTERPRET this snapshot into a UI-ready insight report.
+
+      You must be precise, conservative, and strictly rule-driven.
 
       ========================
-      CRITICAL CONSTRAINTS
+      CRITICAL CONSTRAINTS (NON-NEGOTIABLE)
       ========================
       - DO NOT recompute numbers
       - DO NOT infer missing data
       - DO NOT introduce new metrics
       - DO NOT contradict the snapshot
-      - DO NOT return explanations or prose
+      - DO NOT fabricate trends or causes
+      - DO NOT include explanations or prose outside JSON
       - RETURN ONLY valid JSON
-      - The output MUST EXACTLY match the schema below
+      - Output MUST EXACTLY match the schema below
 
       ========================
       OUTPUT SCHEMA (STRICT)
       ========================
-      Return JSON in the following exact structure:
 
       {
         "summary": string[],
@@ -314,6 +561,18 @@ ${input.firstPageText}
             "percentage": number,
             "trend": "up" | "down" | "stable",
             "count": number
+          }
+        ],
+
+        "subscriptions": [
+          {
+            "merchant": string,
+            "frequency": "weekly" | "monthly" | "annual",
+            "average_amount": number,
+            "is_active": boolean,
+            "confidence": number,
+            "occurrences": number,
+            "first_seen": "YYYY-MM-DD"
           }
         ],
 
@@ -346,44 +605,93 @@ ${input.firstPageText}
       }
 
       ========================
-      HOW TO INTERPRET DATA
+      HOW TO INTERPRET SNAPSHOT DATA
       ========================
 
       SUMMARY:
-      - Write 4–6 concise, insight-driven points
-      - Each point should reference patterns visible in the data
-      - Use absolute values and percentages already present
+      - Provide 4–6 concise, insight-driven bullet points
+      - Reference ONLY values and patterns present in the snapshot
+      - May reference subscriptions if present
+      - Avoid generic financial advice
 
       MONTHLY BREAKDOWN:
       - Use cashflow.months
-      - savings = income - expenses
+      - savings = income − expenses (already provided or directly derivable)
       - savingsRate = savings / income * 100
       - Format month as "MMM YYYY"
 
       CATEGORY BREAKDOWN:
-      - Use dominant categories only
+      - Use dominant expense categories only
       - percentage = percentageOfExpense * 100
       - trend:
-        - "up" if spending increases over months
-        - "down" if decreasing
+        - "up" if spending increases across months
+        - "down" if decreases
         - "stable" otherwise
-      - count = number of transactions (estimate conservatively if needed)
+      - count = number of transactions (estimate conservatively)
 
-      PATTERNS:
-      - Detect recurring behavioral patterns
-      - Examples: weekend spending, investment clustering, volatility
-      - Impact should reflect financial health
+      ========================
+      SUBSCRIPTIONS (FACTUAL, READ-ONLY)
+      ========================
 
-      RECOMMENDATIONS:
+      If snapshot includes a "subscriptions" array:
+
+      - Populate the subscriptions section directly from snapshot data
+      - DO NOT modify, aggregate, annualize, or recompute subscription values
+      - Preserve merchant naming as-is
+      - Include both active and inactive subscriptions
+      - Order subscriptions by is_active (true first), then by confidence descending
+
+      ========================
+      PATTERNS
+      ========================
+
+      - Detect observable behavioral patterns ONLY from snapshot data
+      - Patterns MAY reference subscriptions, but MUST NOT recompute costs
+
+      Allowed subscription-related patterns:
+      - High number of active subscriptions
+      - Low-usage active subscriptions (low occurrences)
+      - High average_amount subscriptions
+      - Subscription redundancy or clustering
+
+      Impact rules:
+      - "negative" → recurring cost inefficiency
+      - "neutral" → informational patterns
+      - "positive" → only if explicitly supported by snapshot health indicators
+
+      ========================
+      RECOMMENDATIONS
+      ========================
+
+      - Must directly correspond to detected patterns
       - Must be realistic and actionable
-      - Tie directly to observed patterns
-      - Avoid generic advice
+      - Subscription recommendations must reference:
+        - low usage
+        - high cost
+        - redundancy
+      - Avoid generic advice like “cancel unused subscriptions”
 
-      GOAL ALIGNMENT SCORE:
-      - Use healthScore normalized to 0–1
+      ========================
+      GOAL ALIGNMENT SCORE
+      ========================
 
-      ANALYSIS PERIOD:
-      - Derive from earliest and latest months in cashflow.months
+      - Use snapshot.healthScore normalized to a 0–1 scale
+
+      ========================
+      ANALYSIS PERIOD
+      ========================
+
+      - Use earliest and latest months from cashflow.months
+
+      ========================
+      FINAL VALIDATION RULES
+      ========================
+
+      - All numeric values MUST come from snapshot
+      - No empty arrays unless snapshot truly lacks data
+      - Output MUST be valid JSON
+      - No trailing commas
+      - No commentary outside the schema
 
       ========================
       INPUT SNAPSHOT (READ-ONLY)

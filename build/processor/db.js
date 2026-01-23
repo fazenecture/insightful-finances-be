@@ -8,6 +8,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -61,7 +72,7 @@ class ProcessorDB {
                         (_b = t.subcategory) !== null && _b !== void 0 ? _b : null,
                         (_c = t.is_internal_transfer) !== null && _c !== void 0 ? _c : false,
                         (_d = t.is_interest) !== null && _d !== void 0 ? _d : false,
-                        (_e = t.is_fee) !== null && _e !== void 0 ? _e : false
+                        (_e = t.is_fee) !== null && _e !== void 0 ? _e : false,
                     ]);
                 }
                 yield client.query("COMMIT");
@@ -107,20 +118,14 @@ class ProcessorDB {
           income = EXCLUDED.income,
           expenses = EXCLUDED.expenses,
           net_cashflow = EXCLUDED.net_cashflow
-        `, [
-                    input.userId,
-                    m.month,
-                    m.inflow,
-                    m.outflow,
-                    m.netCashFlow
-                ]);
+        `, [input.userId, m.month, m.inflow, m.outflow, m.netCashFlow]);
             }
         });
         this.saveSubscriptions = (subscriptions) => __awaiter(this, void 0, void 0, function* () {
             if (subscriptions.length === 0) {
                 return;
             }
-            const query = postgres_1.default.format(`INSERT INTO subscriptions ? ON CONFLICT (id) DO NOTHING`, subscriptions);
+            const query = postgres_1.default.format(`INSERT INTO subscriptions ? `, subscriptions);
             yield postgres_1.default.query(query);
         });
         this.saveHealthScore = (input) => __awaiter(this, void 0, void 0, function* () {
@@ -133,9 +138,59 @@ class ProcessorDB {
         });
         this.saveNarrative = (input) => __awaiter(this, void 0, void 0, function* () {
             yield postgres_1.default.query(`
-      INSERT INTO financial_narratives (user_id, narrative)
-      VALUES ($1,$2)
-      `, [input.userId, input.narrative]);
+      INSERT INTO financial_narratives (user_id, narrative, session_id)
+      VALUES ($1,$2,$3)
+      `, [input.userId, input.narrative, input.sessionId]);
+        });
+        this.fetchNarrativeBySessionId = (obj) => __awaiter(this, void 0, void 0, function* () {
+            const { session_id, user_id } = obj;
+            const query = `
+      SELECT * FROM
+        financial_narratives
+      WHERE 
+        session_id = $1 AND user_id = $2
+      LIMIT 1;
+    `;
+            const { rows } = yield postgres_1.default.query(query, [session_id, user_id]);
+            return rows[0];
+        });
+        this.insertAnalysisSessionDb = (obj) => __awaiter(this, void 0, void 0, function* () {
+            if (obj.length === 0) {
+                return;
+            }
+            const query = postgres_1.default.format(`INSERT INTO analysis_sessions ? `, obj);
+            yield postgres_1.default.query(query);
+        });
+        this.updateAnalysisSessionStatusBySessionIdDb = (obj) => __awaiter(this, void 0, void 0, function* () {
+            const { session_id } = obj, rest = __rest(obj, ["session_id"]);
+            const query = postgres_1.default.format(`UPDATE analysis_sessions SET ? WHERE session_id = $1`, rest);
+            yield postgres_1.default.query(query, [session_id]);
+        });
+        this.fetchTransactionDb = (obj) => __awaiter(this, void 0, void 0, function* () {
+            const { page, limit, session_id } = obj;
+            const offset = page * limit;
+            const query = `
+      SELECT *
+      FROM
+        transactions
+      WHERE 
+        session_id = $1
+      LIMIT $2
+      OFFSET $3`;
+            const values = [session_id, limit, offset];
+            const { rows } = yield postgres_1.default.query(query, values);
+            return rows;
+        });
+        this.fetchTotalTransactionsCountDb = (obj) => __awaiter(this, void 0, void 0, function* () {
+            const { session_id } = obj;
+            const query = `
+      SELECT COUNT(*)
+      FROM
+        transactions
+      WHERE 
+        session_id = $1`;
+            const { rows } = yield postgres_1.default.query(query, [session_id]);
+            return rows[0].count;
         });
     }
 }

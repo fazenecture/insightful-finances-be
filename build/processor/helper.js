@@ -22,6 +22,7 @@ const s3_1 = __importDefault(require("./s3"));
 const p_limit_1 = __importDefault(require("p-limit"));
 const token_chunker_1 = require("../helper/token.chunker");
 const node_crypto_1 = require("node:crypto");
+const enums_1 = require("./types/enums");
 class ProcessorHelper extends db_1.default {
     constructor() {
         super();
@@ -59,6 +60,7 @@ class ProcessorHelper extends db_1.default {
                     accountId: accountIdData,
                     pageText: chunk.text,
                     accountContext: context,
+                    sessionId: input === null || input === void 0 ? void 0 : input.sessionId
                 });
                 txns = this.detectInternalTransfers({ transactions: txns });
                 if (txns.length) {
@@ -199,7 +201,7 @@ class ProcessorHelper extends db_1.default {
             const groups = this.groupByMerchant(input.transactions);
             const subscriptions = [];
             for (const [merchant, txns] of groups.entries()) {
-                if (txns.length < 3)
+                if (txns.length < 2)
                     continue;
                 const dates = txns.map((t) => new Date(t.date)).sort((a, b) => +a - +b);
                 const intervals = this.getDayIntervals(dates);
@@ -280,9 +282,171 @@ class ProcessorHelper extends db_1.default {
             yield this.saveNarrative({
                 userId: input.userId,
                 narrative,
+                sessionId: input.sessionId
             });
         });
         this.sleep = (input) => __awaiter(this, void 0, void 0, function* () { return new Promise((resolve) => setTimeout(resolve, input.ms)); });
+        this.computePdfMetrics = (pages) => {
+            let totalChars = 0;
+            let nonEmptyPages = 0;
+            for (const p of pages) {
+                if (typeof p.text === "string" && p.text.trim().length > 0) {
+                    totalChars += p.text.length;
+                    nonEmptyPages++;
+                }
+            }
+            return {
+                total_chars: totalChars,
+                total_pages: pages.length,
+                non_empty_pages: nonEmptyPages,
+            };
+        };
+        this.estimatePromptTokensFromPdf = (chars) => {
+            return Math.ceil(chars / enums_1.CHARS_PER_TOKEN);
+        };
+        this.estimateTokensFromPdfSession = (input) => {
+            const metrics = this.computePdfMetrics(input.pages);
+            // Estimate tokens from PDF text
+            const pdfPromptTokens = Math.ceil(metrics.total_chars / enums_1.CHARS_PER_TOKEN);
+            const chunksCount = Math.ceil(pdfPromptTokens / input.chunkSizeTokens);
+            // Base context (system prompt, once per session)
+            const contextTokens = Math.ceil(input.baseContextPrompt.length / enums_1.CHARS_PER_TOKEN) + 300; // structured output buffer
+            // Extraction prompt tokens (user messages)
+            const extractionPromptTokens = pdfPromptTokens + chunksCount * input.extractionPromptOverheadTokens;
+            // Completion tokens (model output)
+            const extractionCompletionTokens = Math.ceil(extractionPromptTokens * enums_1.COMPLETION_RATIO);
+            let narrativeTokens = 0;
+            if (input.narrativeEnabled) {
+                narrativeTokens = enums_1.NARRATIVE_TOKENS;
+            }
+            const rawTotal = contextTokens +
+                extractionPromptTokens +
+                extractionCompletionTokens +
+                narrativeTokens;
+            const llmTokensExpected = Math.ceil(rawTotal * enums_1.SAFETY_MULTIPLIER);
+            // Convert to your product tokens
+            const productTokensExpected = Math.ceil(llmTokensExpected / enums_1.LLM_TOKENS_PER_PRODUCT_TOKEN);
+            return {
+                llmTokensExpected,
+                productTokensExpected,
+                breakdown: {
+                    pdf_chars: metrics.total_chars,
+                    pages: metrics.total_pages,
+                    non_empty_pages: metrics.non_empty_pages,
+                    chunks: chunksCount,
+                    contextTokens,
+                    extractionPromptTokens,
+                    extractionCompletionTokens,
+                    narrativeTokens,
+                    safetyMultiplier: enums_1.SAFETY_MULTIPLIER,
+                },
+            };
+        };
+        this.estimateTokensAndTimeFromPdfSession = (input) => {
+            const metrics = this.computePdfMetrics(input.pages);
+            // ---------- TOKEN ESTIMATION ----------
+            const tokenData = this.estimateTokensFromPdfSession(input);
+            // ---------- TIME ESTIMATION ----------
+            const parseTimeMs = metrics.total_pages *
+                enums_1.PERFORMANCE_CONSTANTS.PDF_PARSE_MS_PER_PAGE;
+            const chunksCount = Math.ceil(tokenData.breakdown.extractionPromptTokens /
+                input.chunkSizeTokens);
+            const contextTimeMs = enums_1.PERFORMANCE_CONSTANTS.CONTEXT_DETECTION_MS;
+            const extractionTimeMs = chunksCount *
+                enums_1.PERFORMANCE_CONSTANTS.EXTRACTION_MS_PER_CHUNK;
+            const narrativeTimeMs = input.narrativeEnabled
+                ? enums_1.PERFORMANCE_CONSTANTS.NARRATIVE_MS
+                : 0;
+            const totalTimeMs = (parseTimeMs +
+                contextTimeMs +
+                extractionTimeMs +
+                narrativeTimeMs) *
+                enums_1.PERFORMANCE_CONSTANTS.TIME_SAFETY_MULTIPLIER;
+            return {
+                tokensExpected: tokenData.productTokensExpected,
+                timeSecondsExpected: Math.ceil(totalTimeMs / 1000),
+                breakdown: Object.assign(Object.assign({}, tokenData.breakdown), { parseTimeMs,
+                    contextTimeMs,
+                    extractionTimeMs,
+                    narrativeTimeMs, chunks: chunksCount })
+            };
+        };
+        this.BASE_CONTEXT_PROMPT = `
+You are a deterministic financial transaction extraction engine
+specialized in Indian bank and credit card statements.
+
+Your responsibility is to extract factual transaction data
+exactly as it appears in statement text.
+
+You must be conservative, literal, and precise.
+You must avoid assumptions and never infer information
+that is not explicitly present.
+
+========================
+CORE PRINCIPLES
+========================
+- Extract only what is present in the text
+- Never hallucinate transactions
+- Never reinterpret transaction meaning
+- Never guess account ownership
+- Never calculate totals or summaries
+- If unsure, return null or false
+
+========================
+TRANSACTION DEFINITIONS
+========================
+- amount: ALWAYS positive
+- inflow: credits, deposits, refunds
+- outflow: debits, spends, withdrawals
+
+========================
+INTERNAL TRANSFER DEFINITION
+========================
+Internal transfer = money moved between TWO accounts
+owned by the SAME user.
+
+Mark as internal transfer ONLY when ownership of both sides
+is explicitly clear.
+
+NEVER mark internal transfer for:
+- Merchant payments
+- Investments (stocks, mutual funds, SIPs, IPOs)
+- Payments to individuals
+- Food, transport, shopping, healthcare, subscriptions
+- Any ambiguous case
+
+When in doubt → false.
+
+========================
+RECURRING TRANSACTION SIGNALS
+========================
+You do NOT confirm subscriptions.
+You only flag possible recurring behavior.
+
+Recurring candidates ONLY when:
+- Explicit mandate terms (SI, AUTO DEBIT, E-MANDATE, NACH)
+- Known recurring service merchants
+
+One-time purchases are still candidates, NOT confirmations.
+Investments are NEVER recurring subscriptions.
+
+========================
+CARD & PAYMENT RULES
+========================
+- Debit card transactions belong to bank accounts
+- Credit card transactions belong ONLY to credit card accounts
+- POS or card transactions without explicit credit card context
+  MUST be treated as bank transactions
+- Standing Instructions from debit cards are NOT credit card spends
+
+========================
+OUTPUT RULES
+========================
+- Output ONLY valid JSON
+- Match the requested schema EXACTLY
+- Do not add extra keys
+- Do not add explanations
+`;
         this.llm = new llm_1.default();
         this.analysis = new analysis_1.default();
         this.s3 = new s3_1.default();
