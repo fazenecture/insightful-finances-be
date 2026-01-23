@@ -194,9 +194,7 @@ export default class ProcessorDB {
 
     const query = db.format(
       `
-    INSERT INTO analysis_sessions
-    (session_id, user_id, source_type, status, error_message, tokens_expected, tokens_used)
-    VALUES ?
+    INSERT INTO analysis_sessions ?
     ON CONFLICT (session_id)
     DO UPDATE SET
       session_id = analysis_sessions.session_id -- no-op update
