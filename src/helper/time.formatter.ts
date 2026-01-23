@@ -5,7 +5,7 @@ interface FormattedTime {
   unit: TimeUnit;
 }
 
-function formatSeconds(seconds: number): FormattedTime {
+export function formatSeconds(seconds: number): FormattedTime {
   if (seconds < 60) {
     return { value: seconds, unit: "sec" };
   }

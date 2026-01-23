@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TOKENS_PER_PAGE_ESTIMATE = exports.PERFORMANCE_CONSTANTS = exports.NARRATIVE_TOKENS = exports.LLM_TOKENS_PER_PRODUCT_TOKEN = exports.SAFETY_MULTIPLIER = exports.COMPLETION_RATIO = exports.CHARS_PER_TOKEN = exports.AnalysisStatus = exports.Currency = exports.Category = exports.TransactionSource = exports.TransactionDirection = void 0;
+exports.TOKENS_PER_PAGE_ESTIMATE = exports.PERFORMANCE_CONSTANTS = exports.NARRATIVE_TOKENS = exports.LLM_TOKENS_PER_PRODUCT_TOKEN = exports.SAFETY_MULTIPLIER = exports.COMPLETION_RATIO = exports.CHARS_PER_TOKEN = exports.SSEEventType = exports.AnalysisStatus = exports.Currency = exports.Category = exports.TransactionSource = exports.TransactionDirection = void 0;
 var TransactionDirection;
 (function (TransactionDirection) {
     TransactionDirection["INFLOW"] = "inflow";
@@ -43,6 +43,14 @@ var AnalysisStatus;
     AnalysisStatus["COMPLETED"] = "completed";
     AnalysisStatus["FAILED"] = "failed";
 })(AnalysisStatus || (exports.AnalysisStatus = AnalysisStatus = {}));
+var SSEEventType;
+(function (SSEEventType) {
+    SSEEventType["PROGRESS"] = "progress";
+    SSEEventType["COMPLETED"] = "completed";
+    SSEEventType["ERROR"] = "error";
+    SSEEventType["STAGE"] = "stage";
+    SSEEventType["CLOSE"] = "close";
+})(SSEEventType || (exports.SSEEventType = SSEEventType = {}));
 exports.CHARS_PER_TOKEN = 4; // OpenAI average
 exports.COMPLETION_RATIO = 0.35; // JSON output
 exports.SAFETY_MULTIPLIER = 1.2; // retries + variance
@@ -59,7 +67,7 @@ exports.PERFORMANCE_CONSTANTS = {
     MAX_PARALLEL_CHUNKS: 6, // sequential (safe)
     // Safety buffer
     TIME_SAFETY_MULTIPLIER: 3,
-    BASE_TIME_SAFETY: 2,
+    BASE_TIME_SAFETY: 1.5,
 };
 exports.TOKENS_PER_PAGE_ESTIMATE = 10000;
 //# sourceMappingURL=enums.js.map

@@ -42,6 +42,9 @@ class ProcessorService extends helper_1.default {
                     message: `Analysis session with already in ${sessionData.status} status!`,
                 });
             }
+            this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.STAGE, {
+                stage: "Analysis session initialized.",
+            });
             yield this.insertAnalysisSessionDb([
                 {
                     session_id: input === null || input === void 0 ? void 0 : input.sessionId,
@@ -59,6 +62,9 @@ class ProcessorService extends helper_1.default {
             if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
                 input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
             }
+            this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
+                stage: "Starting PDF batch processing...",
+            });
             /**
              * Analysis Session
              */
@@ -88,6 +94,9 @@ class ProcessorService extends helper_1.default {
             const allTransactions = yield this.fetchTransactionsByUser({
                 userId,
             });
+            this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
+                stage: `Fetched ${allTransactions.length} transactions for analysis.`,
+            });
             // 3. Run deterministic financial analysis
             const analysisSnapshot = this.runFullAnalysis(allTransactions);
             analysisMs = this.ms(analysisStart, this.now());
@@ -101,15 +110,22 @@ class ProcessorService extends helper_1.default {
             dbWriteMs += this.ms(dbStart, this.now());
             // 5. Generate read-only AI narrative
             const narrativeStart = this.now();
+            this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
+                stage: `Generating narrative summary...`,
+            });
             const narrative = yield this.generateNarrativeSnapshot({
                 userId,
                 snapshot: analysisSnapshot,
                 sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
             });
-            console.log("narrative: ", narrative);
             narrativeMs = this.ms(narrativeStart, this.now());
             const completedAt = (0, moment_1.default)().toISOString();
             const totalDurationMs = this.ms(t0, this.now());
+            this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.COMPLETED, {
+                stage: `PDF batch processing completed in ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).value} ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).unit}.`,
+                redirectUrl: `/analysis/result/${input === null || input === void 0 ? void 0 : input.sessionId}`,
+            });
+            this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.CLOSE, {});
             const metaData = {
                 pdf_count: pdfKeys.length,
                 total_pages: totalPages,

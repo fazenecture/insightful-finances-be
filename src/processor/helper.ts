@@ -34,17 +34,21 @@ import {
 } from "./types/enums";
 import { token } from "morgan";
 import { callWithRateLimitRetry } from "../helper/api.retry";
+import SSEManager from "./sse.registery";
 
 export default class ProcessorHelper extends ProcessorDB {
   protected llm: ProcessorLLM;
   protected analysis: FinancialAnalysisEngine;
   protected s3: S3Service;
+  sseManager: SSEManager;
+
 
   constructor() {
     super();
     this.llm = new ProcessorLLM();
     this.analysis = new FinancialAnalysisEngine();
     this.s3 = new S3Service();
+    this.sseManager = new SSEManager();
   }
 
   /* ================================
@@ -581,7 +585,7 @@ export default class ProcessorHelper extends ProcessorDB {
       : 0;
 
     const SMALL_PDF_PENALTY = metrics.total_pages <= 3 ? 1.3 : 1;
-    const MULTI_PDF_PENALTY = input.isBatch ? 1.6 : 1;
+    const MULTI_PDF_PENALTY = input.isBatch ? 1.35 : 1;
 
     const totalTimeMs =
       (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
@@ -590,19 +594,6 @@ export default class ProcessorHelper extends ProcessorDB {
       MULTI_PDF_PENALTY;
 
     const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
-
-    console.log("🔍 PDF METRICS", {
-      total_pages: metrics.total_pages,
-      non_empty_pages: metrics.non_empty_pages,
-      total_chars: metrics.total_chars,
-      estimatedPdfTokens: Math.ceil(metrics.total_chars / CHARS_PER_TOKEN),
-      chunkSizeTokens: input.chunkSizeTokens,
-    });
-
-    console.log("🔍 CHUNK CALC", {
-      estimatedPdfTokens,
-      chunksCount,
-    });
 
     const timeSecondsExpected = Math.max(
       Math.ceil(totalTimeMs / 1000),

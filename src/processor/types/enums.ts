@@ -41,6 +41,14 @@ export enum AnalysisStatus {
   FAILED = "failed"
 }
 
+export enum SSEEventType {
+  PROGRESS = "progress",
+  COMPLETED = "completed",
+  ERROR = "error",
+  STAGE = "stage",
+  CLOSE = "close"
+}
+
 export const CHARS_PER_TOKEN = 4;          // OpenAI average
 export const COMPLETION_RATIO = 0.35;      // JSON output
 export const SAFETY_MULTIPLIER = 1.2;      // retries + variance
@@ -62,7 +70,7 @@ export const PERFORMANCE_CONSTANTS = {
   // Safety buffer
   TIME_SAFETY_MULTIPLIER: 3,
 
-  BASE_TIME_SAFETY: 2,
+  BASE_TIME_SAFETY: 1.5,
 };
 
 export const TOKENS_PER_PAGE_ESTIMATE = 10000;

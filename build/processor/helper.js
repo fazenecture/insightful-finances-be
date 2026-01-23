@@ -24,6 +24,7 @@ const token_chunker_1 = require("../helper/token.chunker");
 const node_crypto_1 = require("node:crypto");
 const enums_1 = require("./types/enums");
 const api_retry_1 = require("../helper/api.retry");
+const sse_registery_1 = __importDefault(require("./sse.registery"));
 class ProcessorHelper extends db_1.default {
     constructor() {
         super();
@@ -367,23 +368,12 @@ class ProcessorHelper extends db_1.default {
                 ? enums_1.PERFORMANCE_CONSTANTS.NARRATIVE_MS
                 : 0;
             const SMALL_PDF_PENALTY = metrics.total_pages <= 3 ? 1.3 : 1;
-            const MULTI_PDF_PENALTY = input.isBatch ? 1.6 : 1;
+            const MULTI_PDF_PENALTY = input.isBatch ? 1.35 : 1;
             const totalTimeMs = (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
                 enums_1.PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
                 SMALL_PDF_PENALTY *
                 MULTI_PDF_PENALTY;
             const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
-            console.log("🔍 PDF METRICS", {
-                total_pages: metrics.total_pages,
-                non_empty_pages: metrics.non_empty_pages,
-                total_chars: metrics.total_chars,
-                estimatedPdfTokens: Math.ceil(metrics.total_chars / enums_1.CHARS_PER_TOKEN),
-                chunkSizeTokens: input.chunkSizeTokens,
-            });
-            console.log("🔍 CHUNK CALC", {
-                estimatedPdfTokens,
-                chunksCount,
-            });
             const timeSecondsExpected = Math.max(Math.ceil(totalTimeMs / 1000), MIN_SECONDS);
             return {
                 tokensExpected: tokenData.productTokensExpected,
@@ -408,6 +398,7 @@ class ProcessorHelper extends db_1.default {
         this.llm = new llm_1.default();
         this.analysis = new analysis_1.default();
         this.s3 = new s3_1.default();
+        this.sseManager = new sse_registery_1.default();
     }
 }
 exports.default = ProcessorHelper;

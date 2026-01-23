@@ -1,7 +1,7 @@
 import customErrorHandler from "../helper/custom.error";
 import ProcessorService from "./service";
 import { Request, Response } from "express";
-import { AnalysisStatus } from "./types/enums";
+import { AnalysisStatus, SSEEventType } from "./types/enums";
 import moment from "moment";
 
 export default class ProcessorController extends ProcessorService {
@@ -28,6 +28,13 @@ export default class ProcessorController extends ProcessorService {
             `Error processing PDF batch for session ${session_id}:`,
             error,
           );
+
+          this.sseManager.emit(session_id, SSEEventType.ERROR, {
+            message: `Processing failed: ${error?.message}`,
+          });
+
+          this.sseManager.emit(session_id, SSEEventType.CLOSE, {});
+
           this.updateAnalysisSessionStatusBySessionIdDb({
             session_id,
             status: AnalysisStatus.FAILED,
@@ -38,6 +45,12 @@ export default class ProcessorController extends ProcessorService {
         });
       });
     } catch (error: any) {
+      this.sseManager.emit(session_id, SSEEventType.ERROR, {
+        message: `Processing failed: ${error?.message}`,
+      });
+
+      this.sseManager.emit(session_id, SSEEventType.CLOSE, {});
+
       this.updateAnalysisSessionStatusBySessionIdDb({
         session_id,
         status: AnalysisStatus.FAILED,
@@ -98,6 +111,47 @@ export default class ProcessorController extends ProcessorService {
         success: true,
         meta_data,
         data,
+      });
+    } catch (error) {
+      customErrorHandler(res, error);
+    }
+  };
+
+  // SSE Related Methods can be added here
+  public streamAnalysisUpdatesController = (req: Request, res: Response) => {
+    try {
+      const { session_id } = req.query;
+
+      if (!session_id || typeof session_id !== "string") {
+        res.status(400).end();
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      this.sseManager.register(<string>session_id, res);
+
+      // Initial handshake event
+      res.write(
+        `event: connected\ndata: ${JSON.stringify({ message: "Connected to SSE stream." })}\n\n`,
+      );
+
+      const heartbeat = setInterval(() => {
+        try {
+          res.write(
+            `event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`,
+          );
+        } catch (err) {
+          // connection probably closed
+          clearInterval(heartbeat);
+        }
+      }, 15000); // 15s is safe
+
+      // Cleanup on client disconnect
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        this.sseManager.unregister(<string>session_id, res);
       });
     } catch (error) {
       customErrorHandler(res, error);

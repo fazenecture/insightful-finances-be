@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.formatSeconds = formatSeconds;
 exports.formatDurationRange = formatDurationRange;
 function formatSeconds(seconds) {
     if (seconds < 60) {

@@ -7,11 +7,11 @@ import {
   IFetchTransactionsReqObj,
   ProcessPdfBatchInput,
 } from "./types/types";
-import { AnalysisStatus } from "./types/enums";
+import { AnalysisStatus, SSEEventType } from "./types/enums";
 import moment from "moment";
 import ErrorHandler from "../helper/error.handler";
 import logger from "../helper/logger";
-import { formatDurationRange } from "../helper/time.formatter";
+import { formatDurationRange, formatSeconds } from "../helper/time.formatter";
 
 export default class ProcessorService extends ProcessorHelper {
   /**
@@ -38,6 +38,10 @@ export default class ProcessorService extends ProcessorHelper {
       });
     }
 
+    this.sseManager.emit(input?.sessionId, SSEEventType.STAGE, {
+      stage: "Analysis session initialized.",
+    });
+
     await this.insertAnalysisSessionDb([
       {
         session_id: input?.sessionId,
@@ -59,6 +63,10 @@ export default class ProcessorService extends ProcessorHelper {
     if (!input?.sessionId) {
       input.sessionId = `pdf-batch-${randomUUID()}`;
     }
+
+    this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
+      stage: "Starting PDF batch processing...",
+    });
 
     /**
      * Analysis Session
@@ -97,6 +105,10 @@ export default class ProcessorService extends ProcessorHelper {
       userId,
     });
 
+    this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
+      stage: `Fetched ${allTransactions.length} transactions for analysis.`,
+    });
+
     // 3. Run deterministic financial analysis
     const analysisSnapshot = this.runFullAnalysis(allTransactions);
 
@@ -115,18 +127,30 @@ export default class ProcessorService extends ProcessorHelper {
 
     // 5. Generate read-only AI narrative
     const narrativeStart = this.now();
+
+    this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
+      stage: `Generating narrative summary...`,
+    });
+
     const narrative = await this.generateNarrativeSnapshot({
       userId,
       snapshot: analysisSnapshot,
       sessionId: input?.sessionId,
     });
 
-    console.log("narrative: ", narrative);
-
     narrativeMs = this.ms(narrativeStart, this.now());
 
     const completedAt = moment().toISOString();
     const totalDurationMs = this.ms(t0, this.now());
+
+    this.sseManager.emit(input?.sessionId, SSEEventType.COMPLETED, {
+      stage: `PDF batch processing completed in ${
+        formatSeconds(totalDurationMs / 1000).value
+      } ${formatSeconds(totalDurationMs / 1000).unit}.`,
+      redirectUrl: `/analysis/result/${input?.sessionId}`,
+    });
+
+    this.sseManager.emit(input?.sessionId, SSEEventType.CLOSE, {});
 
     const metaData = {
       pdf_count: pdfKeys.length,
@@ -219,7 +243,10 @@ export default class ProcessorService extends ProcessorHelper {
       total_time_estimate: {
         min_seconds: totalMinimumTimeSeconds,
         max_seconds: totalMaximumTimeSeconds,
-        display: formatDurationRange(totalMinimumTimeSeconds, totalMaximumTimeSeconds),
+        display: formatDurationRange(
+          totalMinimumTimeSeconds,
+          totalMaximumTimeSeconds,
+        ),
       },
     };
   };
