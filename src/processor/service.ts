@@ -151,12 +151,21 @@ export default class ProcessorService extends ProcessorHelper {
   public fetchTokenEstimateService = async (reqObj: ProcessPdfBatchInput) => {
     const { userId, accountId, pdfKeys } = reqObj;
 
-    let totalTokens = 0;
+    let totalTokens = 0,
+      totalTimeInSecondsExpected = 0;
 
     for (const s3Key of pdfKeys) {
       const pages = await this.extractPdfFromUrl({ url: s3Key });
 
-      const tokenData = this.estimateTokensFromPdfSession({
+      // const tokenData = this.estimateTokensFromPdfSession({
+      //   pages,
+      //   chunkSizeTokens: MAX_TOKENS_PER_CHUNK,
+      //   baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
+      //   extractionPromptOverheadTokens: 900, // static prompt size
+      //   narrativeEnabled: true,
+      // });
+
+      const metricsExpected = this.estimateTokensAndTimeFromPdfSession({
         pages,
         chunkSizeTokens: MAX_TOKENS_PER_CHUNK,
         baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
@@ -164,10 +173,14 @@ export default class ProcessorService extends ProcessorHelper {
         narrativeEnabled: true,
       });
 
-      totalTokens += tokenData.productTokensExpected;
+      totalTokens += metricsExpected.tokensExpected;
+      totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
     }
 
-    return { total_tokens: totalTokens };
+    return {
+      total_tokens: totalTokens,
+      total_time_seconds: totalTimeInSecondsExpected,
+    };
   };
 
   public fetchTransactionsService = async (obj: IFetchTransactionsReqObj) => {

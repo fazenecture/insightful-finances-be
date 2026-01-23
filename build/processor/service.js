@@ -126,19 +126,30 @@ class ProcessorService extends helper_1.default {
         });
         this.fetchTokenEstimateService = (reqObj) => __awaiter(this, void 0, void 0, function* () {
             const { userId, accountId, pdfKeys } = reqObj;
-            let totalTokens = 0;
+            let totalTokens = 0, totalTimeInSecondsExpected = 0;
             for (const s3Key of pdfKeys) {
                 const pages = yield this.extractPdfFromUrl({ url: s3Key });
-                const tokenData = this.estimateTokensFromPdfSession({
+                // const tokenData = this.estimateTokensFromPdfSession({
+                //   pages,
+                //   chunkSizeTokens: MAX_TOKENS_PER_CHUNK,
+                //   baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
+                //   extractionPromptOverheadTokens: 900, // static prompt size
+                //   narrativeEnabled: true,
+                // });
+                const metricsExpected = this.estimateTokensAndTimeFromPdfSession({
                     pages,
                     chunkSizeTokens: token_chunker_1.MAX_TOKENS_PER_CHUNK,
                     baseContextPromptLength: this.BASE_CONTEXT_PROMPT_LENGTH,
                     extractionPromptOverheadTokens: 900, // static prompt size
                     narrativeEnabled: true,
                 });
-                totalTokens += tokenData.productTokensExpected;
+                totalTokens += metricsExpected.tokensExpected;
+                totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
             }
-            return { total_tokens: totalTokens };
+            return {
+                total_tokens: totalTokens,
+                total_time_seconds: totalTimeInSecondsExpected,
+            };
         });
         this.fetchTransactionsService = (obj) => __awaiter(this, void 0, void 0, function* () {
             const [transactionData, transactionTotalCount] = yield Promise.all([
