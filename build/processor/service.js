@@ -127,6 +127,7 @@ class ProcessorService extends helper_1.default {
             narrativeMs = this.ms(narrativeStart, this.now());
             const completedAt = (0, moment_1.default)().toISOString();
             const totalDurationMs = this.ms(t0, this.now());
+            console.log(`Completed PDF batch processing for session: ${input === null || input === void 0 ? void 0 : input.sessionId} in ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).value} ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).unit}`);
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.COMPLETED, {
                 stage: `completed`,
                 message: `PDF batch processing completed in ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).value} ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).unit}.`,

@@ -150,6 +150,11 @@ export default class ProcessorService extends ProcessorHelper {
     const completedAt = moment().toISOString();
     const totalDurationMs = this.ms(t0, this.now());
 
+    console.log(
+      `Completed PDF batch processing for session: ${input?.sessionId} in ${formatSeconds(
+        totalDurationMs / 1000,
+      ).value} ${formatSeconds(totalDurationMs / 1000).unit}`,
+    );
     this.sseManager.emit(input?.sessionId, SSEEventType.COMPLETED, {
       stage: `completed`,
       message: `PDF batch processing completed in ${
