@@ -65,7 +65,8 @@ export default class ProcessorService extends ProcessorHelper {
     }
 
     this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
-      stage: "Starting PDF batch processing...",
+      stage: "parsing",
+      message: `Starting PDF batch processing for ${pdfKeys.length} PDFs...`,
     });
 
     /**
@@ -106,7 +107,8 @@ export default class ProcessorService extends ProcessorHelper {
     });
 
     this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
-      stage: `Fetched ${allTransactions.length} transactions for analysis.`,
+      stage: `understanding`,
+      message: `Fetched ${allTransactions.length} transactions for analysis.`,
     });
 
     // 3. Run deterministic financial analysis
@@ -129,7 +131,8 @@ export default class ProcessorService extends ProcessorHelper {
     const narrativeStart = this.now();
 
     this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
-      stage: `Generating narrative summary...`,
+      stage: `analyzing`,
+      message: `Generating narrative summary...`,
     });
 
     const narrative = await this.generateNarrativeSnapshot({
@@ -144,7 +147,8 @@ export default class ProcessorService extends ProcessorHelper {
     const totalDurationMs = this.ms(t0, this.now());
 
     this.sseManager.emit(input?.sessionId, SSEEventType.COMPLETED, {
-      stage: `PDF batch processing completed in ${
+      stage: `completed`,
+      message: `PDF batch processing completed in ${
         formatSeconds(totalDurationMs / 1000).value
       } ${formatSeconds(totalDurationMs / 1000).unit}.`,
       redirectUrl: `/analysis/result/${input?.sessionId}`,

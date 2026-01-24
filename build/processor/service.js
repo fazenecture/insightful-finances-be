@@ -64,7 +64,8 @@ class ProcessorService extends helper_1.default {
                 input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
             }
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
-                stage: "Starting PDF batch processing...",
+                stage: "parsing",
+                message: `Starting PDF batch processing for ${pdfKeys.length} PDFs...`,
             });
             /**
              * Analysis Session
@@ -96,7 +97,8 @@ class ProcessorService extends helper_1.default {
                 userId,
             });
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
-                stage: `Fetched ${allTransactions.length} transactions for analysis.`,
+                stage: `understanding`,
+                message: `Fetched ${allTransactions.length} transactions for analysis.`,
             });
             // 3. Run deterministic financial analysis
             const analysisSnapshot = this.runFullAnalysis(allTransactions);
@@ -112,7 +114,8 @@ class ProcessorService extends helper_1.default {
             // 5. Generate read-only AI narrative
             const narrativeStart = this.now();
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
-                stage: `Generating narrative summary...`,
+                stage: `analyzing`,
+                message: `Generating narrative summary...`,
             });
             const narrative = yield this.generateNarrativeSnapshot({
                 userId,
@@ -123,7 +126,8 @@ class ProcessorService extends helper_1.default {
             const completedAt = (0, moment_1.default)().toISOString();
             const totalDurationMs = this.ms(t0, this.now());
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.COMPLETED, {
-                stage: `PDF batch processing completed in ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).value} ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).unit}.`,
+                stage: `completed`,
+                message: `PDF batch processing completed in ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).value} ${(0, time_formatter_1.formatSeconds)(totalDurationMs / 1000).unit}.`,
                 redirectUrl: `/analysis/result/${input === null || input === void 0 ? void 0 : input.sessionId}`,
             });
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.CLOSE, {});
