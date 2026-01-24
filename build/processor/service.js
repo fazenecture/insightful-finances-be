@@ -43,8 +43,9 @@ class ProcessorService extends helper_1.default {
                     message: `Analysis session with already in ${sessionData.status} status!`,
                 });
             }
+            console.log("Inserting analysis session for:", input === null || input === void 0 ? void 0 : input.sessionId);
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.STAGE, {
-                stage: "Analysis session initialized.",
+                stage: "initiated",
             });
             yield this.insertAnalysisSessionDb([
                 {
@@ -63,6 +64,7 @@ class ProcessorService extends helper_1.default {
             if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
                 input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
             }
+            console.log(`Starting PDF batch processing for session: ${input === null || input === void 0 ? void 0 : input.sessionId}, PDFs: ${pdfKeys.length}`);
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.PROGRESS, {
                 stage: "parsing",
                 message: `Starting PDF batch processing for ${pdfKeys.length} PDFs...`,

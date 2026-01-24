@@ -38,8 +38,9 @@ export default class ProcessorService extends ProcessorHelper {
       });
     }
 
+    console.log("Inserting analysis session for:", input?.sessionId);
     this.sseManager.emit(input?.sessionId, SSEEventType.STAGE, {
-      stage: "Analysis session initialized.",
+      stage: "initiated",
     });
 
     await this.insertAnalysisSessionDb([
@@ -64,6 +65,9 @@ export default class ProcessorService extends ProcessorHelper {
       input.sessionId = `pdf-batch-${randomUUID()}`;
     }
 
+    console.log(
+      `Starting PDF batch processing for session: ${input?.sessionId}, PDFs: ${pdfKeys.length}`,
+    );
     this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {
       stage: "parsing",
       message: `Starting PDF batch processing for ${pdfKeys.length} PDFs...`,
