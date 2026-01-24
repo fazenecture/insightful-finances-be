@@ -236,7 +236,7 @@ export default class ProcessorService extends ProcessorHelper {
       totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
       totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
       totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
-      totalCooldownSeconds += metricsExpected.breakdown.cooldownSeconds;
+      totalCooldownSeconds += metricsExpected?.breakdown?.estimatedCooldownSeconds || 0;
     }
 
     let isLLMCallRateLimited = false;

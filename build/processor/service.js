@@ -165,6 +165,7 @@ class ProcessorService extends helper_1.default {
             return Object.assign(Object.assign({}, data), { narrative: JSON.parse(data.narrative) });
         });
         this.fetchTokenEstimateService = (reqObj) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const { userId, accountId, pdfKeys } = reqObj;
             let totalTokens = 0, totalTimeInSecondsExpected = 0, totalMinimumTimeSeconds = 0, totalMaximumTimeSeconds = 0, totalCooldownSeconds = 0;
             let isBatch = pdfKeys.length > 1;
@@ -189,7 +190,7 @@ class ProcessorService extends helper_1.default {
                 totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
                 totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
                 totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
-                totalCooldownSeconds += metricsExpected.breakdown.cooldownSeconds;
+                totalCooldownSeconds += ((_a = metricsExpected === null || metricsExpected === void 0 ? void 0 : metricsExpected.breakdown) === null || _a === void 0 ? void 0 : _a.estimatedCooldownSeconds) || 0;
             }
             let isLLMCallRateLimited = false;
             if (totalCooldownSeconds > 0) {
