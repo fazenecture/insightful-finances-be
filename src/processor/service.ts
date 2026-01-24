@@ -207,7 +207,8 @@ export default class ProcessorService extends ProcessorHelper {
     let totalTokens = 0,
       totalTimeInSecondsExpected = 0,
       totalMinimumTimeSeconds = 0,
-      totalMaximumTimeSeconds = 0;
+      totalMaximumTimeSeconds = 0,
+      totalCooldownSeconds = 0;
 
     let isBatch = pdfKeys.length > 1;
 
@@ -235,6 +236,15 @@ export default class ProcessorService extends ProcessorHelper {
       totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
       totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
       totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
+      totalCooldownSeconds += metricsExpected.breakdown.cooldownSeconds;
+    }
+
+    let isLLMCallRateLimited = false;
+
+    if (totalCooldownSeconds > 0) {
+      logger.info(`Total estimated cooldown time for batch: ${totalCooldownSeconds}s`);
+      isLLMCallRateLimited = true;
+
     }
 
     return {
@@ -247,6 +257,8 @@ export default class ProcessorService extends ProcessorHelper {
           totalMinimumTimeSeconds,
           totalMaximumTimeSeconds,
         ),
+        total_cooldown_seconds: totalCooldownSeconds,
+        is_llm_call_rate_limited: isLLMCallRateLimited,
       },
     };
   };

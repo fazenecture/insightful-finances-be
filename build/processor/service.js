@@ -19,6 +19,7 @@ const helper_1 = __importDefault(require("./helper"));
 const enums_1 = require("./types/enums");
 const moment_1 = __importDefault(require("moment"));
 const error_handler_1 = __importDefault(require("../helper/error.handler"));
+const logger_1 = __importDefault(require("../helper/logger"));
 const time_formatter_1 = require("../helper/time.formatter");
 class ProcessorService extends helper_1.default {
     constructor() {
@@ -165,7 +166,7 @@ class ProcessorService extends helper_1.default {
         });
         this.fetchTokenEstimateService = (reqObj) => __awaiter(this, void 0, void 0, function* () {
             const { userId, accountId, pdfKeys } = reqObj;
-            let totalTokens = 0, totalTimeInSecondsExpected = 0, totalMinimumTimeSeconds = 0, totalMaximumTimeSeconds = 0;
+            let totalTokens = 0, totalTimeInSecondsExpected = 0, totalMinimumTimeSeconds = 0, totalMaximumTimeSeconds = 0, totalCooldownSeconds = 0;
             let isBatch = pdfKeys.length > 1;
             for (const s3Key of pdfKeys) {
                 const pages = yield this.extractPdfFromUrl({ url: s3Key });
@@ -188,6 +189,12 @@ class ProcessorService extends helper_1.default {
                 totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
                 totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
                 totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
+                totalCooldownSeconds += metricsExpected.breakdown.cooldownSeconds;
+            }
+            let isLLMCallRateLimited = false;
+            if (totalCooldownSeconds > 0) {
+                logger_1.default.info(`Total estimated cooldown time for batch: ${totalCooldownSeconds}s`);
+                isLLMCallRateLimited = true;
             }
             return {
                 total_tokens: totalTokens,
@@ -196,6 +203,8 @@ class ProcessorService extends helper_1.default {
                     min_seconds: totalMinimumTimeSeconds,
                     max_seconds: totalMaximumTimeSeconds,
                     display: (0, time_formatter_1.formatDurationRange)(totalMinimumTimeSeconds, totalMaximumTimeSeconds),
+                    total_cooldown_seconds: totalCooldownSeconds,
+                    is_llm_call_rate_limited: isLLMCallRateLimited,
                 },
             };
         });
