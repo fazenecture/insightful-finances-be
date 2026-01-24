@@ -26,7 +26,7 @@ const pool = new pg_1.Pool({
     ssl: {
         rejectUnauthorized: false, // only for dev
     },
-    options: `-c search_path=finance-tracker,public`
+    options: `-c search_path=finance-tracker,public`,
 });
 const wrapClient = (client) => ({
     query: (text, params) => __awaiter(void 0, void 0, void 0, function* () {
@@ -65,6 +65,11 @@ exports.default = {
         return __awaiter(this, void 0, void 0, function* () {
             const client = yield pool.connect();
             return wrapClient(client); // 👈 use this instead of raw client
+        });
+    },
+    getRawClient() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return pool.connect(); // raw pg client
         });
     },
     format: pg_2.format,

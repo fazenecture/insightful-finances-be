@@ -21,7 +21,7 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false, // only for dev
   },
-  options: `-c search_path=finance-tracker,public`
+  options: `-c search_path=finance-tracker,public`,
 });
 
 const wrapClient = (client) => ({
@@ -32,7 +32,9 @@ const wrapClient = (client) => ({
     const res = await client.query(text, params);
     const duration = Date.now() - start;
     if (isDev) {
-      logger.info(`executed query ${JSON.stringify({ text, duration, rows: res.rowCount })}`);
+      logger.info(
+        `executed query ${JSON.stringify({ text, duration, rows: res.rowCount })}`,
+      );
     }
     return res;
   },
@@ -50,7 +52,9 @@ export default {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
     if (isDev) {
-        logger.info(`executed query ${JSON.stringify({ text, duration, rows: res.rowCount })}`);
+      logger.info(
+        `executed query ${JSON.stringify({ text, duration, rows: res.rowCount })}`,
+      );
     }
     return res;
   },
@@ -58,6 +62,10 @@ export default {
   async getClient() {
     const client = await pool.connect();
     return wrapClient(client); // 👈 use this instead of raw client
+  },
+
+  async getRawClient() {
+    return pool.connect(); // raw pg client
   },
 
   format,

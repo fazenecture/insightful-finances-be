@@ -158,4 +158,22 @@ export default class ProcessorController extends ProcessorService {
       customErrorHandler(res, error);
     }
   };
+
+  public downloadTransactionsController = async (
+    req: Request,
+    res: Response,
+  ) => {
+    try {
+      const { session_id } = req.params;
+
+      const data = await this.downloadTransactionsCsvService(session_id);
+
+      res.status(200).send({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      customErrorHandler(res, error);
+    }
+  };
 }

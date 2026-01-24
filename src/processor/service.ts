@@ -151,9 +151,9 @@ export default class ProcessorService extends ProcessorHelper {
     const totalDurationMs = this.ms(t0, this.now());
 
     console.log(
-      `Completed PDF batch processing for session: ${input?.sessionId} in ${formatSeconds(
-        totalDurationMs / 1000,
-      ).value} ${formatSeconds(totalDurationMs / 1000).unit}`,
+      `Completed PDF batch processing for session: ${input?.sessionId} in ${
+        formatSeconds(totalDurationMs / 1000).value
+      } ${formatSeconds(totalDurationMs / 1000).unit}`,
     );
     this.sseManager.emit(input?.sessionId, SSEEventType.COMPLETED, {
       stage: `completed`,
@@ -249,15 +249,17 @@ export default class ProcessorService extends ProcessorHelper {
       totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
       totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
       totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
-      totalCooldownSeconds += metricsExpected?.breakdown?.estimatedCooldownSeconds || 0;
+      totalCooldownSeconds +=
+        metricsExpected?.breakdown?.estimatedCooldownSeconds || 0;
     }
 
     let isLLMCallRateLimited = false;
 
     if (totalCooldownSeconds > 0) {
-      logger.info(`Total estimated cooldown time for batch: ${totalCooldownSeconds}s`);
+      logger.info(
+        `Total estimated cooldown time for batch: ${totalCooldownSeconds}s`,
+      );
       isLLMCallRateLimited = true;
-
     }
 
     return {
@@ -291,6 +293,19 @@ export default class ProcessorService extends ProcessorHelper {
     return {
       data: transactionData,
       meta_data: metaData,
+    };
+  };
+
+  public downloadTransactionsCsvService = async (
+    session_id: string,
+  ): Promise<any> => {
+    const s3Url = await this.exportBySessionIdHelper(session_id);
+
+    const downloadUrl = await this.s3.getSignedDownloadUrl(s3Url);
+
+    return {
+      download_url: downloadUrl,
+      expiry_time: moment().add(15, "minutes").toISOString(),
     };
   };
 }

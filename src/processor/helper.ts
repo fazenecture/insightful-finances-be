@@ -7,6 +7,9 @@ import ProcessorLLM from "./llm";
 import FinancialAnalysisEngine from "./analysis";
 import S3Service from "./s3";
 import pLimit from "p-limit";
+import { PassThrough } from "stream";
+import { pipeline } from "stream/promises";
+import { stringify } from "csv-stringify";
 
 import {
   ProcessSinglePdfInput,
@@ -593,9 +596,10 @@ export default class ProcessorHelper extends ProcessorDB {
 
     const totalTimeMs =
       (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
-      PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
-      SMALL_PDF_PENALTY *
-      MULTI_PDF_PENALTY + (cooldownSeconds * 1000);
+        PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
+        SMALL_PDF_PENALTY *
+        MULTI_PDF_PENALTY +
+      cooldownSeconds * 1000;
 
     const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
 
@@ -645,5 +649,41 @@ export default class ProcessorHelper extends ProcessorDB {
 
     // Each extra window forces a wait of ~60s
     return windows * 60;
+  };
+
+  public exportBySessionIdHelper = async (sessionId: string): Promise<string> => {
+    const dbStream = await this.streamTransactionsBySessionId(sessionId);
+
+    const csvStream = stringify({
+      header: true,
+      columns: [
+        "date",
+        "description",
+        "merchant",
+        "amount",
+        "direction",
+        "source",
+        "currency",
+        "category",
+        "subcategory",
+        "is_internal_transfer",
+        "is_interest",
+        "is_fee",
+        "is_recurring_candidate",
+        "recurring_signal",
+      ],
+    });
+
+    const passThrough = new PassThrough();
+
+    const s3Key = `exports/transactions_${sessionId}_${Date.now()}.csv`;
+
+    const uploadPromise = this.s3.uploadCsvStream(s3Key, passThrough);
+
+    await pipeline(dbStream, csvStream, passThrough);
+
+    await uploadPromise;
+
+    return s3Key;
   };
 }

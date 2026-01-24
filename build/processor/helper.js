@@ -20,6 +20,9 @@ const llm_1 = __importDefault(require("./llm"));
 const analysis_1 = __importDefault(require("./analysis"));
 const s3_1 = __importDefault(require("./s3"));
 const p_limit_1 = __importDefault(require("p-limit"));
+const stream_1 = require("stream");
+const promises_1 = require("stream/promises");
+const csv_stringify_1 = require("csv-stringify");
 const token_chunker_1 = require("../helper/token.chunker");
 const node_crypto_1 = require("node:crypto");
 const enums_1 = require("./types/enums");
@@ -373,7 +376,8 @@ class ProcessorHelper extends db_1.default {
             const totalTimeMs = (parseTimeMs + contextTimeMs + extractionTimeMs + narrativeTimeMs) *
                 enums_1.PERFORMANCE_CONSTANTS.BASE_TIME_SAFETY *
                 SMALL_PDF_PENALTY *
-                MULTI_PDF_PENALTY + (cooldownSeconds * 1000);
+                MULTI_PDF_PENALTY +
+                cooldownSeconds * 1000;
             const MIN_SECONDS = input.narrativeEnabled ? 35 : 20;
             const timeSecondsExpected = Math.max(Math.ceil(totalTimeMs / 1000), MIN_SECONDS);
             return {
@@ -403,6 +407,34 @@ class ProcessorHelper extends db_1.default {
             // Each extra window forces a wait of ~60s
             return windows * 60;
         };
+        this.exportBySessionIdHelper = (sessionId) => __awaiter(this, void 0, void 0, function* () {
+            const dbStream = yield this.streamTransactionsBySessionId(sessionId);
+            const csvStream = (0, csv_stringify_1.stringify)({
+                header: true,
+                columns: [
+                    "date",
+                    "description",
+                    "merchant",
+                    "amount",
+                    "direction",
+                    "source",
+                    "currency",
+                    "category",
+                    "subcategory",
+                    "is_internal_transfer",
+                    "is_interest",
+                    "is_fee",
+                    "is_recurring_candidate",
+                    "recurring_signal",
+                ],
+            });
+            const passThrough = new stream_1.PassThrough();
+            const s3Key = `exports/transactions_${sessionId}_${Date.now()}.csv`;
+            const uploadPromise = this.s3.uploadCsvStream(s3Key, passThrough);
+            yield (0, promises_1.pipeline)(dbStream, csvStream, passThrough);
+            yield uploadPromise;
+            return s3Key;
+        });
         this.llm = new llm_1.default();
         this.analysis = new analysis_1.default();
         this.s3 = new s3_1.default();

@@ -197,7 +197,8 @@ class ProcessorService extends helper_1.default {
                 totalTimeInSecondsExpected += metricsExpected.timeSecondsExpected;
                 totalMinimumTimeSeconds += metricsExpected.timeEstimate.minSeconds;
                 totalMaximumTimeSeconds += metricsExpected.timeEstimate.maxSeconds;
-                totalCooldownSeconds += ((_a = metricsExpected === null || metricsExpected === void 0 ? void 0 : metricsExpected.breakdown) === null || _a === void 0 ? void 0 : _a.estimatedCooldownSeconds) || 0;
+                totalCooldownSeconds +=
+                    ((_a = metricsExpected === null || metricsExpected === void 0 ? void 0 : metricsExpected.breakdown) === null || _a === void 0 ? void 0 : _a.estimatedCooldownSeconds) || 0;
             }
             let isLLMCallRateLimited = false;
             if (totalCooldownSeconds > 0) {
@@ -229,6 +230,14 @@ class ProcessorService extends helper_1.default {
             return {
                 data: transactionData,
                 meta_data: metaData,
+            };
+        });
+        this.downloadTransactionsCsvService = (session_id) => __awaiter(this, void 0, void 0, function* () {
+            const s3Url = yield this.exportBySessionIdHelper(session_id);
+            const downloadUrl = yield this.s3.getSignedDownloadUrl(s3Url);
+            return {
+                download_url: downloadUrl,
+                expiry_time: (0, moment_1.default)().add(15, "minutes").toISOString(),
             };
         });
     }

@@ -26,6 +26,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // processor/db.ts
 const postgres_1 = __importDefault(require("../config/postgres"));
 const error_handler_1 = __importDefault(require("../helper/error.handler"));
+const pg_query_stream_1 = __importDefault(require("pg-query-stream"));
 class ProcessorDB {
     constructor() {
         /* ================================
@@ -212,6 +213,32 @@ class ProcessorDB {
         session_id = $1`;
             const { rows } = yield postgres_1.default.query(query, [session_id]);
             return rows[0].count;
+        });
+        this.streamTransactionsBySessionId = (session_id) => __awaiter(this, void 0, void 0, function* () {
+            const client = yield postgres_1.default.getRawClient();
+            const query = new pg_query_stream_1.default(`
+    SELECT
+      date::text AS date,
+      description,
+      merchant,
+      amount,
+      direction,
+      source,
+      currency,
+      category,
+      subcategory,
+      is_internal_transfer,
+      is_interest,
+      is_fee,
+      is_recurring_candidate,
+      recurring_signal
+    FROM transactions
+    WHERE session_id = $1
+    `, [session_id]);
+            const stream = client.query(query);
+            stream.on("end", () => client.release());
+            stream.on("error", () => client.release());
+            return stream;
         });
     }
 }

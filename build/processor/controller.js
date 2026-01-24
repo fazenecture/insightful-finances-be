@@ -149,6 +149,19 @@ class ProcessorController extends service_1.default {
                 (0, custom_error_1.default)(res, error);
             }
         };
+        this.downloadTransactionsController = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { session_id } = req.params;
+                const data = yield this.downloadTransactionsCsvService(session_id);
+                res.status(200).send({
+                    success: true,
+                    data,
+                });
+            }
+            catch (error) {
+                (0, custom_error_1.default)(res, error);
+            }
+        });
     }
 }
 exports.default = ProcessorController;

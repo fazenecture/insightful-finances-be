@@ -9,6 +9,7 @@ import {
   IUpdateAnalysisSessionBySessionIdReqObj,
   Transaction,
 } from "./types/types";
+import QueryStream from "pg-query-stream";
 
 export default class ProcessorDB {
   /* ================================
@@ -62,7 +63,7 @@ export default class ProcessorDB {
             t.is_internal_transfer ?? false,
             t.is_interest ?? false,
             t.is_fee ?? false,
-          ]
+          ],
         );
       }
 
@@ -95,7 +96,7 @@ export default class ProcessorDB {
   }): Promise<Transaction[]> => {
     const { rows } = await db.query(
       `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date`,
-      [input.userId]
+      [input.userId],
     );
     return rows;
   };
@@ -125,13 +126,13 @@ export default class ProcessorDB {
           expenses = EXCLUDED.expenses,
           net_cashflow = EXCLUDED.net_cashflow
         `,
-        [input.userId, m.month, m.inflow, m.outflow, m.netCashFlow]
+        [input.userId, m.month, m.inflow, m.outflow, m.netCashFlow],
       );
     }
   };
 
   public saveSubscriptions = async (
-    subscriptions: IDetectedSubscription[]
+    subscriptions: IDetectedSubscription[],
   ): Promise<void> => {
     if (subscriptions.length === 0) {
       return;
@@ -153,7 +154,7 @@ export default class ProcessorDB {
       ON CONFLICT (user_id)
       DO UPDATE SET score = EXCLUDED.score
       `,
-      [input.userId, input.score]
+      [input.userId, input.score],
     );
   };
 
@@ -167,7 +168,7 @@ export default class ProcessorDB {
       INSERT INTO financial_narratives (user_id, narrative, session_id)
       VALUES ($1,$2,$3)
       `,
-      [input.userId, input.narrative, input.sessionId]
+      [input.userId, input.narrative, input.sessionId],
     );
   };
 
@@ -203,7 +204,7 @@ export default class ProcessorDB {
   };
 
   public fetchAnalysisSessionBySessionIdDb = async (
-    session_id: string
+    session_id: string,
   ): Promise<IAnalysisSessionObj | null> => {
     const query = `
       SELECT id, status, session_id FROM
@@ -221,20 +222,20 @@ export default class ProcessorDB {
   };
 
   public updateAnalysisSessionStatusBySessionIdDb = async (
-    obj: IUpdateAnalysisSessionBySessionIdReqObj
+    obj: IUpdateAnalysisSessionBySessionIdReqObj,
   ) => {
     const { session_id, ...rest } = obj;
 
     const query = db.format(
       `UPDATE analysis_sessions SET ? WHERE session_id = $1`,
-      rest as any
+      rest as any,
     );
 
     await db.query(query, [session_id]);
   };
 
   public fetchTransactionDb = async (
-    obj: IFetchTransactionsReqObj
+    obj: IFetchTransactionsReqObj,
   ): Promise<Transaction[]> => {
     const { page, limit, session_id } = obj;
 
@@ -256,7 +257,7 @@ export default class ProcessorDB {
   };
 
   public fetchTotalTransactionsCountDb = async (
-    obj: IFetchTransactionsReqObj
+    obj: IFetchTransactionsReqObj,
   ) => {
     const { session_id } = obj;
 
@@ -269,5 +270,41 @@ export default class ProcessorDB {
 
     const { rows } = await db.query(query, [session_id]);
     return rows[0].count as unknown as any;
+  };
+
+  public streamTransactionsBySessionId = async (
+    session_id: string,
+  ): Promise<NodeJS.ReadableStream> => {
+    const client = await db.getRawClient();
+
+    const query = new QueryStream(
+      `
+    SELECT
+      date::text AS date,
+      description,
+      merchant,
+      amount,
+      direction,
+      source,
+      currency,
+      category,
+      subcategory,
+      is_internal_transfer,
+      is_interest,
+      is_fee,
+      is_recurring_candidate,
+      recurring_signal
+    FROM transactions
+    WHERE session_id = $1
+    `,
+      [session_id],
+    );
+
+    const stream = client.query(query);
+
+    stream.on("end", () => client.release());
+    stream.on("error", () => client.release());
+
+    return stream;
   };
 }
