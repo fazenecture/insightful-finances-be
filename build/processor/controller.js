@@ -126,6 +126,7 @@ class ProcessorController extends service_1.default {
                 res.setHeader("Content-Type", "text/event-stream");
                 res.setHeader("Cache-Control", "no-cache");
                 res.setHeader("Connection", "keep-alive");
+                res.setHeader("X-Accel-Buffering", "no");
                 this.sseManager.register(session_id, res);
                 // Initial handshake event
                 res.write(`event: connected\ndata: ${JSON.stringify({ message: "Connected to SSE stream." })}\n\n`);
