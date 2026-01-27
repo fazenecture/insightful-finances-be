@@ -20,11 +20,10 @@ class ProcessorController extends service_1.default {
     constructor() {
         super(...arguments);
         this.execute = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            const { user_id, account_id, pdf_keys, session_id } = req.body;
+            const { user_id, pdf_keys, session_id } = req.body;
             try {
-                yield this.executePdfAnalysis({
+                const data = yield this.executePdfAnalysis({
                     userId: user_id,
-                    accountId: account_id,
                     pdfKeys: pdf_keys,
                     sessionId: session_id,
                 });
@@ -32,7 +31,6 @@ class ProcessorController extends service_1.default {
                 setImmediate(() => __awaiter(this, void 0, void 0, function* () {
                     this.processPdfBatch({
                         userId: user_id,
-                        accountId: account_id,
                         pdfKeys: pdf_keys,
                         sessionId: session_id,
                     }).catch((error) => {
@@ -41,6 +39,15 @@ class ProcessorController extends service_1.default {
                             message: `Processing failed: ${error === null || error === void 0 ? void 0 : error.message}`,
                         });
                         this.sseManager.emit(session_id, enums_1.SSEEventType.CLOSE, {});
+                        this.updateUserTokensDb({
+                            user_id,
+                            paid_tokens_used: data.paid_tokens_used,
+                            free_tokens_used: data.free_tokens_used,
+                            free_tokens_granted: data.free_tokens_granted,
+                            paid_tokens_granted: data.paid_tokens_granted,
+                            updated_at: (0, moment_1.default)().format(),
+                            updated_by: user_id,
+                        });
                         this.updateAnalysisSessionStatusBySessionIdDb({
                             session_id,
                             status: enums_1.AnalysisStatus.FAILED,
@@ -81,12 +88,11 @@ class ProcessorController extends service_1.default {
         });
         this.fetchTokenEstimateController = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const { user_id, pdf_keys, session_id } = req.body;
+                const { user_id, pdf_keys } = req.body;
                 const data = yield this.fetchTokenEstimateService({
                     userId: user_id,
-                    accountId: session_id,
                     pdfKeys: pdf_keys,
-                    sessionId: session_id,
+                    sessionId: "",
                 });
                 return res.status(200).send({
                     success: true,
@@ -149,6 +155,7 @@ class ProcessorController extends service_1.default {
                 (0, custom_error_1.default)(res, error);
             }
         };
+        // TODO : ADD USER_ID in the REQUEST BODY for more validation
         this.downloadTransactionsController = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const { session_id } = req.params;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import ProcessorController from "./controller";
+import { authValidation } from "../middleware/auth.middleware";
 
 const router = Router();
 const {
@@ -11,16 +12,17 @@ const {
   downloadTransactionsController,
 } = new ProcessorController();
 
-router.post("/process", execute);
+router.post("/process", authValidation, execute);
 
-router.post("/result/:id", fetchAnalysisDataController);
+router.post("/result/:id", authValidation, fetchAnalysisDataController);
 
 router.post("/tokens-estimate", fetchTokenEstimateController);
-router.get("/stream/analysis", streamAnalysisUpdatesController);
+router.get("/stream/analysis", authValidation, streamAnalysisUpdatesController);
 
-router.get("/transactions/:session_id", fetchTransactionsController);
+router.get("/transactions/:session_id", authValidation, fetchTransactionsController);
 router.get(
   "/transactions/download/:session_id",
+  authValidation,
   downloadTransactionsController,
 );
 

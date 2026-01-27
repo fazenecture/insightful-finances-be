@@ -2,7 +2,7 @@ import { AnalysisStatus, Currency, TransactionDirection, TransactionSource } fro
 
 export type Transaction = {
   transaction_id: string;
-  user_id: string;
+  user_id: number;
   account_id: string;
   date: string;
   description: string;
@@ -35,33 +35,31 @@ export type MonthlyMetrics = {
 };
 
 export type ProcessPdfBatchInput = {
-  userId: string;
-  accountId: string;
+  userId: number;
   sessionId: string;
   pdfKeys: string[];
   tokensEstimate?: number;
 };
 
 export type ProcessSinglePdfInput = {
-  userId: string;
-  accountId: string;
+  userId: number;
   s3Key: string;
   sessionId: string;
 };
 
 export type ExtractTransactionsInput = {
-  userId: string;
+  userId: number;
   accountId: string;
   pageText: string;
 };
 
 export type PersistAnalysisInput = {
-  userId: string;
+  userId: number;
   snapshot: any;
 };
 
 export type GenerateNarrativeInput = {
-  userId: string;
+  userId: number;
   snapshot: any;
   sessionId: string;
 };
@@ -91,7 +89,7 @@ export type IDetectedSubscription = {
   occurrences: number;
   transactions: string[]; // transaction_ids
   created_at: string;
-  user_id: string;
+  user_id: number;
 };
 
 
@@ -101,13 +99,13 @@ export type IPageWithRows = {
 };
 
 export type IFetchAnalysisDataServiceReqObj = {
-  user_id: string;
+  user_id: number;
   session_id: string;
 }
 
 export type IAnalysisSessionObj = {
   session_id: string;
-  user_id: string;
+  user_id: number;
   source_type: string;
   status: AnalysisStatus;
   error_message?: string;
@@ -125,7 +123,7 @@ export type InsertAnalysisSessionResult = {
 
 export type IFetchNarrativeDbReqObj = {
   session_id: string;
-  user_id: string;
+  user_id: number;
 }
 
 export type IPdfTextMetrics = {
@@ -148,4 +146,17 @@ export type IFetchTransactionsReqObj = {
   limit: number;
   search: string | null;
   session_id: string;
+}
+
+export type IUpdateUserTokensDbReqObj = {
+  user_id: number;
+
+  free_tokens_used: number;
+  paid_tokens_used: number;
+
+  free_tokens_granted?: number;
+  paid_tokens_granted?: number;
+
+  updated_at: string;
+  updated_by: number;
 }

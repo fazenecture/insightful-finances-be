@@ -15,7 +15,7 @@ export default class ProcessorLLM {
      TRANSACTION EXTRACTION
      ================================ */
 public extractAndEnrichTransactions = async (input: {
-  userId: string;
+  userId: number;
   accountId: string;
   pageText: string;
   accountContext: AccountContext;
@@ -536,7 +536,7 @@ ${input.firstPageText}
      ================================ */
 
 public generateNarrative = async (input: {
-  userId: string;
+  userId: number;
   snapshot: any;
 }): Promise<string> => {
 

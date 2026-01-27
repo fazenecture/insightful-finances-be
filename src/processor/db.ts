@@ -1,4 +1,5 @@
 // processor/db.ts
+import { IFetchUserDetailsWithTokensResObj } from "../auth/types/types";
 import db from "../config/postgres";
 import ErrorHandler from "../helper/error.handler";
 import {
@@ -7,6 +8,7 @@ import {
   IFetchNarrativeDbReqObj,
   IFetchTransactionsReqObj,
   IUpdateAnalysisSessionBySessionIdReqObj,
+  IUpdateUserTokensDbReqObj,
   Transaction,
 } from "./types/types";
 import QueryStream from "pg-query-stream";
@@ -92,7 +94,7 @@ export default class ProcessorDB {
   };
 
   public fetchTransactionsByUser = async (input: {
-    userId: string;
+    userId: number;
   }): Promise<Transaction[]> => {
     const { rows } = await db.query(
       `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date`,
@@ -106,7 +108,7 @@ export default class ProcessorDB {
      ================================ */
 
   public saveMonthlyMetrics = async (input: {
-    userId: string;
+    userId: number;
     months: any[];
   }): Promise<void> => {
     for (const m of input.months) {
@@ -144,7 +146,7 @@ export default class ProcessorDB {
   };
 
   public saveHealthScore = async (input: {
-    userId: string;
+    userId: number;
     score: number;
   }): Promise<void> => {
     await db.query(
@@ -159,7 +161,7 @@ export default class ProcessorDB {
   };
 
   public saveNarrative = async (input: {
-    userId: string;
+    userId: number;
     narrative: string;
     sessionId: string;
   }): Promise<void> => {
@@ -202,6 +204,17 @@ export default class ProcessorDB {
     const query = db.format(`INSERT INTO analysis_sessions ? `, obj);
     await db.query(query);
   };
+
+  public updateUserTokensDb = async (obj: IUpdateUserTokensDbReqObj) => {
+    const {user_id, ...rest} = obj;
+
+    const query = db.format(
+      `UPDATE user_tokens SET ? WHERE user_id = $1`,
+      rest as any,
+    );
+
+    await db.query(query, [user_id]);
+  }
 
   public fetchAnalysisSessionBySessionIdDb = async (
     session_id: string,
@@ -307,4 +320,33 @@ export default class ProcessorDB {
 
     return stream;
   };
+
+    protected fetchUserDetailsWithTokensByIdDb = async (
+      id: number,
+    ): Promise<IFetchUserDetailsWithTokensResObj> => {
+      const query = `
+        SELECT 
+          u.*, json_build_object(
+            'id', ut.id,
+            'user_id', ut.user_id,
+            'free_tokens_granted', ut.free_tokens_granted,
+            'free_tokens_used', ut.free_tokens_used,
+            'paid_tokens_granted', ut.paid_tokens_granted,
+            'paid_tokens_used', ut.paid_tokens_used,
+            'total_tokens_used', ut.total_tokens_used,
+            'total_tokens_granted', ut.total_tokens_granted,
+            'total_net_tokens', ut.total_net_tokens
+            ) AS user_tokens
+        FROM 
+          users u
+        JOIN 
+          user_tokens ut ON u.id = ut.user_id
+        WHERE 
+          u.id = $1
+        LIMIT 1;
+      `;
+  
+      const { rows } = await db.query(query, [id]);
+      return rows[0] as unknown as IFetchUserDetailsWithTokensResObj;
+    };
 }

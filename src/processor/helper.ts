@@ -38,6 +38,7 @@ import {
 import { token } from "morgan";
 import { callWithRateLimitRetry } from "../helper/api.retry";
 import SSEManager from "./sse.registery";
+import ErrorHandler from "../helper/error.handler";
 
 export default class ProcessorHelper extends ProcessorDB {
   protected llm: ProcessorLLM;
@@ -651,7 +652,9 @@ export default class ProcessorHelper extends ProcessorDB {
     return windows * 60;
   };
 
-  public exportBySessionIdHelper = async (sessionId: string): Promise<string> => {
+  public exportBySessionIdHelper = async (
+    sessionId: string,
+  ): Promise<string> => {
     const dbStream = await this.streamTransactionsBySessionId(sessionId);
 
     const csvStream = stringify({
@@ -685,5 +688,55 @@ export default class ProcessorHelper extends ProcessorDB {
     await uploadPromise;
 
     return s3Key;
+  };
+
+  public calculateUpdatedTokenUsage = (input: {
+    free_tokens_granted: number;
+    free_tokens_used: number;
+    paid_tokens_granted: number;
+    paid_tokens_used: number;
+    estimated_tokens_to_use: number;
+  }): {
+    free_tokens_used: number;
+    paid_tokens_used: number;
+  } => {
+    const {
+      free_tokens_granted,
+      free_tokens_used,
+      paid_tokens_granted,
+      paid_tokens_used,
+      estimated_tokens_to_use: estimatedTokensToUse,
+    } = input;
+
+    if (estimatedTokensToUse <= 0) {
+      throw new ErrorHandler({
+        status_code: 400,
+        message: "estimatedTokensToUse must be greater than 0",
+      });
+    }
+
+    const freeRemaining = free_tokens_granted - free_tokens_used;
+    const paidRemaining = paid_tokens_granted - paid_tokens_used;
+
+    const totalAvailable = freeRemaining + paidRemaining;
+
+    if (totalAvailable < estimatedTokensToUse) {
+      throw new ErrorHandler({
+        status_code: 400,
+        message: "Insufficient tokens",
+      });
+    }
+
+    // Consume free tokens first
+    const freeToConsume = Math.min(freeRemaining, estimatedTokensToUse);
+    const remainingAfterFree = estimatedTokensToUse - freeToConsume;
+
+    // Consume paid tokens if needed
+    const paidToConsume = remainingAfterFree;
+
+    return {
+      free_tokens_used: free_tokens_used + freeToConsume,
+      paid_tokens_used: paid_tokens_used + paidToConsume,
+    };
   };
 }

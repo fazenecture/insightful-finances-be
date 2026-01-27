@@ -6,11 +6,10 @@ import moment from "moment";
 
 export default class ProcessorController extends ProcessorService {
   public execute = async (req: Request, res: Response) => {
-    const { user_id, account_id, pdf_keys, session_id } = req.body;
+    const { user_id, pdf_keys, session_id } = req.body;
     try {
-      await this.executePdfAnalysis({
+      const data = await this.executePdfAnalysis({
         userId: user_id,
-        accountId: account_id,
         pdfKeys: pdf_keys,
         sessionId: session_id,
       });
@@ -20,7 +19,6 @@ export default class ProcessorController extends ProcessorService {
       setImmediate(async () => {
         this.processPdfBatch({
           userId: user_id,
-          accountId: account_id,
           pdfKeys: pdf_keys,
           sessionId: session_id,
         }).catch((error) => {
@@ -34,6 +32,16 @@ export default class ProcessorController extends ProcessorService {
           });
 
           this.sseManager.emit(session_id, SSEEventType.CLOSE, {});
+
+          this.updateUserTokensDb({
+            user_id,
+            paid_tokens_used: data.paid_tokens_used,
+            free_tokens_used: data.free_tokens_used,
+            free_tokens_granted: data.free_tokens_granted,
+            paid_tokens_granted: data.paid_tokens_granted,
+            updated_at: moment().format(),
+            updated_by: user_id,
+          });
 
           this.updateAnalysisSessionStatusBySessionIdDb({
             session_id,
@@ -79,13 +87,12 @@ export default class ProcessorController extends ProcessorService {
 
   public fetchTokenEstimateController = async (req: Request, res: Response) => {
     try {
-      const { user_id, pdf_keys, session_id } = req.body;
+      const { user_id, pdf_keys } = req.body;
 
       const data = await this.fetchTokenEstimateService({
         userId: user_id,
-        accountId: session_id,
         pdfKeys: pdf_keys,
-        sessionId: session_id,
+        sessionId: "",
       });
       return res.status(200).send({
         success: true,
@@ -159,6 +166,7 @@ export default class ProcessorController extends ProcessorService {
     }
   };
 
+  // TODO : ADD USER_ID in the REQUEST BODY for more validation
   public downloadTransactionsController = async (
     req: Request,
     res: Response,

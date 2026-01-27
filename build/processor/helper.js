@@ -28,6 +28,7 @@ const node_crypto_1 = require("node:crypto");
 const enums_1 = require("./types/enums");
 const api_retry_1 = require("../helper/api.retry");
 const sse_registery_1 = __importDefault(require("./sse.registery"));
+const error_handler_1 = __importDefault(require("../helper/error.handler"));
 class ProcessorHelper extends db_1.default {
     constructor() {
         super();
@@ -435,6 +436,33 @@ class ProcessorHelper extends db_1.default {
             yield uploadPromise;
             return s3Key;
         });
+        this.calculateUpdatedTokenUsage = (input) => {
+            const { free_tokens_granted, free_tokens_used, paid_tokens_granted, paid_tokens_used, estimated_tokens_to_use: estimatedTokensToUse, } = input;
+            if (estimatedTokensToUse <= 0) {
+                throw new error_handler_1.default({
+                    status_code: 400,
+                    message: "estimatedTokensToUse must be greater than 0",
+                });
+            }
+            const freeRemaining = free_tokens_granted - free_tokens_used;
+            const paidRemaining = paid_tokens_granted - paid_tokens_used;
+            const totalAvailable = freeRemaining + paidRemaining;
+            if (totalAvailable < estimatedTokensToUse) {
+                throw new error_handler_1.default({
+                    status_code: 400,
+                    message: "Insufficient tokens",
+                });
+            }
+            // Consume free tokens first
+            const freeToConsume = Math.min(freeRemaining, estimatedTokensToUse);
+            const remainingAfterFree = estimatedTokensToUse - freeToConsume;
+            // Consume paid tokens if needed
+            const paidToConsume = remainingAfterFree;
+            return {
+                free_tokens_used: free_tokens_used + freeToConsume,
+                paid_tokens_used: paid_tokens_used + paidToConsume,
+            };
+        };
         this.llm = new llm_1.default();
         this.analysis = new analysis_1.default();
         this.s3 = new s3_1.default();

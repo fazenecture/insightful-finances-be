@@ -27,6 +27,37 @@ export default class ProcessorService extends ProcessorHelper {
       input.sessionId = `pdf-batch-${randomUUID()}`;
     }
 
+    // check if the user exists & the token
+    const user = await this.fetchUserDetailsWithTokensByIdDb(input.userId);
+
+    if (!user) {
+      throw new ErrorHandler({
+        status_code: 400,
+        message: "User not found, signup required to process PDFs",
+      });
+    }
+
+    if (user.user_tokens.total_net_tokens === 0) {
+      throw new ErrorHandler({
+        status_code: 402,
+        message:
+          "Insufficient tokens. Please purchase additional tokens to proceed.",
+      });
+    }
+
+    const estimatedTokenData = await this.fetchTokenEstimateService({
+      userId: input.userId,
+      pdfKeys: input.pdfKeys,
+      sessionId: input.sessionId,
+    });
+
+    if (estimatedTokenData.total_tokens > user.user_tokens.total_net_tokens) {
+      throw new ErrorHandler({
+        status_code: 402,
+        message: `Insufficient tokens. Estimated tokens required: ${estimatedTokenData.total_tokens}, but only ${user.user_tokens.total_net_tokens} available. Please purchase additional tokens to proceed.`,
+      });
+    }
+
     const sessionData = await this.fetchAnalysisSessionBySessionIdDb(
       input?.sessionId!,
     );
@@ -43,6 +74,14 @@ export default class ProcessorService extends ProcessorHelper {
       stage: "initiated",
     });
 
+    const tokenUsageData = this.calculateUpdatedTokenUsage({
+      free_tokens_granted: user.user_tokens.free_tokens_granted,
+      free_tokens_used: user.user_tokens.free_tokens_used,
+      paid_tokens_granted: user.user_tokens.paid_tokens_granted,
+      paid_tokens_used: user.user_tokens.paid_tokens_used,
+      estimated_tokens_to_use: estimatedTokenData.total_tokens,
+    });
+
     await this.insertAnalysisSessionDb([
       {
         session_id: input?.sessionId,
@@ -53,12 +92,29 @@ export default class ProcessorService extends ProcessorHelper {
         tokens_expected: input?.tokensEstimate ?? 0,
       },
     ]);
+
+    await this.updateUserTokensDb({
+      user_id: input.userId,
+      free_tokens_used: tokenUsageData.free_tokens_used,
+      paid_tokens_used: tokenUsageData.paid_tokens_used,
+      updated_at: moment().format(),
+      updated_by: input.userId,
+    });
+
+    return {
+      session_id: input?.sessionId,
+      estimated_tokens: estimatedTokenData.total_tokens,
+      paid_tokens_used: user.user_tokens.paid_tokens_used,
+      free_tokens_used: user.user_tokens.free_tokens_used,
+      free_tokens_granted: user.user_tokens.free_tokens_granted,
+      paid_tokens_granted: user.user_tokens.paid_tokens_granted,
+    };
   };
 
   public processPdfBatch = async (
     input: ProcessPdfBatchInput,
   ): Promise<void> => {
-    const { userId, accountId, pdfKeys } = input;
+    const { userId, pdfKeys } = input;
 
     // a fail check
     if (!input?.sessionId) {
@@ -93,7 +149,6 @@ export default class ProcessorService extends ProcessorHelper {
     for (const s3Key of pdfKeys) {
       const tokenData = await this.processSinglePdf({
         userId,
-        accountId,
         s3Key,
         sessionId: input?.sessionId,
       });
@@ -215,7 +270,7 @@ export default class ProcessorService extends ProcessorHelper {
   };
 
   public fetchTokenEstimateService = async (reqObj: ProcessPdfBatchInput) => {
-    const { userId, accountId, pdfKeys } = reqObj;
+    const { pdfKeys } = reqObj;
 
     let totalTokens = 0,
       totalTimeInSecondsExpected = 0,

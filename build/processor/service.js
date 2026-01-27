@@ -36,6 +36,31 @@ class ProcessorService extends helper_1.default {
             if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
                 input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
             }
+            // check if the user exists & the token
+            const user = yield this.fetchUserDetailsWithTokensByIdDb(input.userId);
+            if (!user) {
+                throw new error_handler_1.default({
+                    status_code: 400,
+                    message: "User not found, signup required to process PDFs",
+                });
+            }
+            if (user.user_tokens.total_net_tokens === 0) {
+                throw new error_handler_1.default({
+                    status_code: 402,
+                    message: "Insufficient tokens. Please purchase additional tokens to proceed.",
+                });
+            }
+            const estimatedTokenData = yield this.fetchTokenEstimateService({
+                userId: input.userId,
+                pdfKeys: input.pdfKeys,
+                sessionId: input.sessionId,
+            });
+            if (estimatedTokenData.total_tokens > user.user_tokens.total_net_tokens) {
+                throw new error_handler_1.default({
+                    status_code: 402,
+                    message: `Insufficient tokens. Estimated tokens required: ${estimatedTokenData.total_tokens}, but only ${user.user_tokens.total_net_tokens} available. Please purchase additional tokens to proceed.`,
+                });
+            }
             const sessionData = yield this.fetchAnalysisSessionBySessionIdDb(input === null || input === void 0 ? void 0 : input.sessionId);
             if (sessionData === null || sessionData === void 0 ? void 0 : sessionData.status.length) {
                 throw new error_handler_1.default({
@@ -47,6 +72,13 @@ class ProcessorService extends helper_1.default {
             this.sseManager.emit(input === null || input === void 0 ? void 0 : input.sessionId, enums_1.SSEEventType.STAGE, {
                 stage: "initiated",
             });
+            const tokenUsageData = this.calculateUpdatedTokenUsage({
+                free_tokens_granted: user.user_tokens.free_tokens_granted,
+                free_tokens_used: user.user_tokens.free_tokens_used,
+                paid_tokens_granted: user.user_tokens.paid_tokens_granted,
+                paid_tokens_used: user.user_tokens.paid_tokens_used,
+                estimated_tokens_to_use: estimatedTokenData.total_tokens,
+            });
             yield this.insertAnalysisSessionDb([
                 {
                     session_id: input === null || input === void 0 ? void 0 : input.sessionId,
@@ -57,9 +89,24 @@ class ProcessorService extends helper_1.default {
                     tokens_expected: (_a = input === null || input === void 0 ? void 0 : input.tokensEstimate) !== null && _a !== void 0 ? _a : 0,
                 },
             ]);
+            yield this.updateUserTokensDb({
+                user_id: input.userId,
+                free_tokens_used: tokenUsageData.free_tokens_used,
+                paid_tokens_used: tokenUsageData.paid_tokens_used,
+                updated_at: (0, moment_1.default)().format(),
+                updated_by: input.userId,
+            });
+            return {
+                session_id: input === null || input === void 0 ? void 0 : input.sessionId,
+                estimated_tokens: estimatedTokenData.total_tokens,
+                paid_tokens_used: user.user_tokens.paid_tokens_used,
+                free_tokens_used: user.user_tokens.free_tokens_used,
+                free_tokens_granted: user.user_tokens.free_tokens_granted,
+                paid_tokens_granted: user.user_tokens.paid_tokens_granted,
+            };
         });
         this.processPdfBatch = (input) => __awaiter(this, void 0, void 0, function* () {
-            const { userId, accountId, pdfKeys } = input;
+            const { userId, pdfKeys } = input;
             // a fail check
             if (!(input === null || input === void 0 ? void 0 : input.sessionId)) {
                 input.sessionId = `pdf-batch-${(0, node_crypto_1.randomUUID)()}`;
@@ -85,7 +132,6 @@ class ProcessorService extends helper_1.default {
             for (const s3Key of pdfKeys) {
                 const tokenData = yield this.processSinglePdf({
                     userId,
-                    accountId,
                     s3Key,
                     sessionId: input === null || input === void 0 ? void 0 : input.sessionId,
                 });
@@ -173,7 +219,7 @@ class ProcessorService extends helper_1.default {
         });
         this.fetchTokenEstimateService = (reqObj) => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            const { userId, accountId, pdfKeys } = reqObj;
+            const { pdfKeys } = reqObj;
             let totalTokens = 0, totalTimeInSecondsExpected = 0, totalMinimumTimeSeconds = 0, totalMaximumTimeSeconds = 0, totalCooldownSeconds = 0;
             let isBatch = pdfKeys.length > 1;
             for (const s3Key of pdfKeys) {

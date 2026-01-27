@@ -23,7 +23,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// processor/db.ts
 const postgres_1 = __importDefault(require("../config/postgres"));
 const error_handler_1 = __importDefault(require("../helper/error.handler"));
 const pg_query_stream_1 = __importDefault(require("pg-query-stream"));
@@ -169,6 +168,11 @@ class ProcessorDB {
             const query = postgres_1.default.format(`INSERT INTO analysis_sessions ? `, obj);
             yield postgres_1.default.query(query);
         });
+        this.updateUserTokensDb = (obj) => __awaiter(this, void 0, void 0, function* () {
+            const { user_id } = obj, rest = __rest(obj, ["user_id"]);
+            const query = postgres_1.default.format(`UPDATE user_tokens SET ? WHERE user_id = $1`, rest);
+            yield postgres_1.default.query(query, [user_id]);
+        });
         this.fetchAnalysisSessionBySessionIdDb = (session_id) => __awaiter(this, void 0, void 0, function* () {
             const query = `
       SELECT id, status, session_id FROM
@@ -239,6 +243,31 @@ class ProcessorDB {
             stream.on("end", () => client.release());
             stream.on("error", () => client.release());
             return stream;
+        });
+        this.fetchUserDetailsWithTokensByIdDb = (id) => __awaiter(this, void 0, void 0, function* () {
+            const query = `
+        SELECT 
+          u.*, json_build_object(
+            'id', ut.id,
+            'user_id', ut.user_id,
+            'free_tokens_granted', ut.free_tokens_granted,
+            'free_tokens_used', ut.free_tokens_used,
+            'paid_tokens_granted', ut.paid_tokens_granted,
+            'paid_tokens_used', ut.paid_tokens_used,
+            'total_tokens_used', ut.total_tokens_used,
+            'total_tokens_granted', ut.total_tokens_granted,
+            'total_net_tokens', ut.total_net_tokens
+            ) AS user_tokens
+        FROM 
+          users u
+        JOIN 
+          user_tokens ut ON u.id = ut.user_id
+        WHERE 
+          u.id = $1
+        LIMIT 1;
+      `;
+            const { rows } = yield postgres_1.default.query(query, [id]);
+            return rows[0];
         });
     }
 }
