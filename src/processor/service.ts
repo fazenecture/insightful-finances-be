@@ -172,11 +172,13 @@ export default class ProcessorService extends ProcessorHelper {
 
     // 3. Run deterministic financial analysis
     const analysisSnapshot = this.runFullAnalysis(allTransactions);
+    console.log('analysisSnapshot: ', analysisSnapshot);
 
     analysisMs = this.ms(analysisStart, this.now());
 
     // 3️⃣ Persist snapshot
     const dbStart = this.now();
+    console.log('dbStart: ', dbStart);
 
     // 4. Persist computed metrics
     await this.persistAnalysisSnapshot({

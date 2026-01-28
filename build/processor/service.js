@@ -150,9 +150,11 @@ class ProcessorService extends helper_1.default {
             });
             // 3. Run deterministic financial analysis
             const analysisSnapshot = this.runFullAnalysis(allTransactions);
+            console.log('analysisSnapshot: ', analysisSnapshot);
             analysisMs = this.ms(analysisStart, this.now());
             // 3️⃣ Persist snapshot
             const dbStart = this.now();
+            console.log('dbStart: ', dbStart);
             // 4. Persist computed metrics
             yield this.persistAnalysisSnapshot({
                 userId,
