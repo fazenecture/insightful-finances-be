@@ -11,7 +11,7 @@ export const authValidation = async (
   next: NextFunction
 ) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1] || "";
+    const token = req.headers.authorization?.split(" ")[1] || req.query?.token || "";
 
     if (!token?.length) {
       res.status(401).send({

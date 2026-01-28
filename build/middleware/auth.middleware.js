@@ -18,9 +18,9 @@ const service_1 = __importDefault(require("../auth/service"));
 const enums_1 = require("../auth/types/enums");
 const { PUBLIC_KEY, reGenerateTokens } = new service_1.default();
 const authValidation = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
-        const token = ((_a = req.headers.authorization) === null || _a === void 0 ? void 0 : _a.split(" ")[1]) || "";
+        const token = ((_a = req.headers.authorization) === null || _a === void 0 ? void 0 : _a.split(" ")[1]) || ((_b = req.query) === null || _b === void 0 ? void 0 : _b.token) || "";
         if (!(token === null || token === void 0 ? void 0 : token.length)) {
             res.status(401).send({
                 success: false,
