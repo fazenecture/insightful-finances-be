@@ -112,6 +112,7 @@ export default class PaymentsService extends PaymentsHelper {
       tokens_granted,
     } = this.extractIdsFromWebhookPayload(payload);
 
+    console.log('payment_uuid: ', payment_uuid);
     if (!payment_uuid) {
       throw new ErrorHandler({
         status_code: 400,
@@ -131,6 +132,7 @@ export default class PaymentsService extends PaymentsHelper {
       });
     }
 
+    console.log('event: ', event);
     if (event === RazorPayPaymentWebhookEvent.PAYMENT_CAPTURED) {
       if (paymentRecord.status === PaymentStatus.PAID) {
         // Idempotent - already processed

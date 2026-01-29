@@ -32,6 +32,8 @@ export default class PaymentsDb {
 
     const client = obj?.dbClient || db as any;
 
+    delete rest.dbClient;
+
     const query = client.format(
       `UPDATE payments SET ? WHERE uuid = $1 RETURNING *`,
       rest as any,
