@@ -12,6 +12,7 @@ const allowedOrigins = [
   "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app",
   "http://localhost:8080",
   "https://finance-insight-alpha.vercel.app",
+  "https://www.checkmyleak.in"
 ];
 
 app.use(
