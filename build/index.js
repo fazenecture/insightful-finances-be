@@ -51,16 +51,19 @@ const morgan_1 = __importDefault(require("morgan"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const index_router_1 = __importDefault(require("./routes/index.router"));
+const controller_1 = __importDefault(require("./payments/controller"));
+const { paymentWebhookController } = new controller_1.default();
 const app = (0, express_1.default)();
 const allowedOrigins = [
     "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app",
     "http://localhost:8080",
     "https://finance-insight-alpha.vercel.app",
+    "https://www.checkmyleak.in",
 ];
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl)
-        console.log('origin: ', origin);
+        console.log("origin: ", origin);
         if (!origin)
             return callback(null, true);
         if (allowedOrigins.includes(origin)) {
@@ -72,10 +75,12 @@ app.use((0, cors_1.default)({
     },
     credentials: true,
 }));
-app.use(express_1.default.json());
 app.set("trust proxy", true);
 app.use((0, morgan_1.default)("dev"));
+app.post("/api/payments/webhook", express_1.default.raw({ type: "application/json" }), paymentWebhookController);
 app.use("/api", index_router_1.default);
+app.use(express_1.default.json());
+app.use(express_1.default.urlencoded({ extended: true }));
 app.get("/health", (req, res) => {
     res.status(200).json({
         uptime: process.uptime(),

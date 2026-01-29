@@ -46,6 +46,7 @@
     "puppeteer": "^24.9.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "razorpay": "^2.9.6",
     "sqlutils": "^1.5.4",
     "tiktoken": "^1.0.22",
     "ts-node": "^10.9.2",

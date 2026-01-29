@@ -5,6 +5,9 @@ import { Request, Response } from "express";
 import express, { Application } from "express";
 import cors from "cors";
 import baseRouter from "./routes/index.router";
+import PaymentsController from "./payments/controller";
+
+const { paymentWebhookController } = new PaymentsController();
 
 const app: Application = express();
 
@@ -12,14 +15,14 @@ const allowedOrigins = [
   "https://id-preview--f992b107-57d4-49cd-bfe8-bb4ce1748d71.lovable.app",
   "http://localhost:8080",
   "https://finance-insight-alpha.vercel.app",
-  "https://www.checkmyleak.in"
+  "https://www.checkmyleak.in",
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl)
-      console.log('origin: ', origin);
+      console.log("origin: ", origin);
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
@@ -28,15 +31,22 @@ app.use(
       }
     },
     credentials: true,
-  })
+  }),
 );
 
-app.use(express.json());
 app.set("trust proxy", true);
 app.use(morgan("dev"));
 
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  paymentWebhookController,
+);
+
 app.use("/api", baseRouter);
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({
@@ -51,7 +61,6 @@ app.use("*", (req: Request, res: Response) => {
     message: "NOT_FOUND",
   });
 });
-
 
 const PORT = process.env.PORT || 4000;
 
