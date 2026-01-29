@@ -16,7 +16,6 @@ import {
   IVerifyPaymentServiceReqObj,
 } from "./types/types";
 import { randomUUID } from "crypto";
-import tokens from "razorpay/dist/types/tokens";
 
 export default class PaymentsService extends PaymentsHelper {
   protected createOrderService = async (obj: ICreateOrderServiceReqObj) => {
@@ -78,7 +77,7 @@ export default class PaymentsService extends PaymentsHelper {
 
     return {
       payment_order_id: razorpayOrder.id,
-      amount: amountInPaise,
+      amount: amountInPaise / 100,
       currency: Currency.INR,
       payment_uuid: paymentUUID,
       tokens_granted: tokensGranted,
