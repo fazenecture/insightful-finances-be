@@ -43,7 +43,7 @@ export enum PaymentStatus {
  */
 
 export const TOKEN_PACKAGES = {
-  starter: { price_inr: 299, tokens: 50 },
+  starter: { price_inr: 10, tokens: 50 },
   pro: { price_inr: 699, tokens: 150 },
   power: { price_inr: 1499, tokens: 400 },
 };
