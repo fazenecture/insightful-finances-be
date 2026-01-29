@@ -20,7 +20,7 @@ import { randomUUID } from "crypto";
 export default class PaymentsService extends PaymentsHelper {
   protected createOrderService = async (obj: ICreateOrderServiceReqObj) => {
     let tokensGranted: number = 0;
-    let amountInPaise: number = 0;
+    let amount: number = 0;
     let metaData: any = {};
 
     if (obj.type === OrderType.PACKAGE) {
@@ -33,14 +33,16 @@ export default class PaymentsService extends PaymentsHelper {
       }
 
       tokensGranted = pkg.tokens;
-      amountInPaise = pkg.price_inr * 100;
+      amount = pkg.price_inr;
       metaData.package_id = obj.package_id;
+      metaData.order_type = OrderType.PACKAGE;
+      metaData.amount_inr = pkg.price_inr;
     }
 
     const paymentUUID = randomUUID();
 
     const razorpayOrderParams = {
-      amount: amountInPaise,
+      amount: amount,
       receipt: `order_rcptid_${new Date().getTime()}_${obj.user_id}`,
       currency: Currency.INR,
       notes: {
@@ -62,7 +64,7 @@ export default class PaymentsService extends PaymentsHelper {
       razorpay_payment_id: null,
       razorpay_refund_id: null,
       razorpay_signature: null,
-      amount_in_paise: amountInPaise,
+      amount_in_paise: amount,
       currency: Currency.INR,
       status: PaymentStatus.CREATED,
       tokens_granted: tokensGranted,
@@ -77,7 +79,7 @@ export default class PaymentsService extends PaymentsHelper {
 
     return {
       payment_order_id: razorpayOrder.id,
-      amount: amountInPaise / 100,
+      amount: amount,
       currency: Currency.INR,
       payment_uuid: paymentUUID,
       tokens_granted: tokensGranted,
