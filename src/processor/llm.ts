@@ -133,6 +133,13 @@ export default class ProcessorLLM {
         Transfer methods such as NEFT, IMPS, RTGS, or UPI
         are NEUTRAL and MUST NOT be used as the ONLY evidence of internal transfer.
 
+
+        IMPORTANT NEGATIVE RULE:
+
+        A counterparty name matching HolderName
+        WITHOUT explicit self-transfer intent keywords
+        MUST NOT be treated as an internal transfer.
+
         ABSOLUTE BLOCKERS (NON-OVERRIDABLE):
 
         If counterparty name appears to be a business, company, or organization,
@@ -160,20 +167,37 @@ export default class ProcessorLLM {
 
         When in doubt → is_internal_transfer = false
 
-        ========================
-        DIRECTION DEFINITION (CRITICAL)
-        ========================
 
-        Direction represents USER CASHFLOW.
+        DIRECTION EXTRACTION SCOPE (ABSOLUTE):
 
-        BANK accounts:
-        - Credits → inflow
-        - Debits → outflow
+        Direction MUST be determined ONLY from the transaction row itself,
+        using numeric and column indicators.
 
-        CREDIT CARD accounts:
-        - Card spends → outflow
-        - Refunds → inflow
-        - Bill payments → outflow
+        The model MUST NOT use:
+        - Keywords such as "Deposit", "Credit", "Transfer"
+        - Section headers like "DEP TFR", "INTEREST CREDIT"
+        - Any text outside the transaction row
+
+        If multiple rows are present, direction must be determined
+        independently for each row.
+
+        DIRECTION DETERMINATION (NON-INFERENTIAL):
+
+        For BANK accounts:
+
+        1. If the transaction amount is prefixed with "-" → direction = "outflow"
+        2. If the transaction amount is NOT prefixed with "-" → direction = "inflow"
+
+        Supporting evidence (may confirm but never override):
+        - Balance decreases → outflow
+        - Balance increases → inflow
+
+        Textual keywords such as:
+        - "Deposit"
+        - "Credit"
+        - "Debit"
+        - "Transfer"
+        MUST NOT be used to determine direction.
 
         ========================
         CREDIT CARD BILL PAYMENT OVERRIDE (ABSOLUTE)
@@ -291,7 +315,6 @@ export default class ProcessorLLM {
         - financial_services
         - personal_transfer
         - accommodation
-        - subscriptions
         - donations
         - education
         - others
@@ -410,6 +433,8 @@ export default class ProcessorLLM {
         RULE EVALUATION ORDER (MANDATORY)
         ========================
 
+        Direction MUST be determined BEFORE applying rule evaluation order.
+
         1. Internal transfer detection
         2. Credit card bill override
         3. Income classification
@@ -424,9 +449,21 @@ export default class ProcessorLLM {
         CONFIDENCE SCORING (STRICT)
         ========================
 
-        - Explicit rule match → confidence = 1.0
-        - Weak-signal categorization → confidence ≤ 0.7
-        - Category = null → confidence ≤ 0.4
+        CONFIDENCE represents confidence in the OVERALL transaction interpretation,
+        not only categorization.
+
+        Direction correctness alone may justify confidence ≥ 0.7,
+        even if category is null.
+
+        ========================
+        BANK-SPECIFIC OVERRIDES (SBI):
+        ========================
+
+        If a transaction line contains:
+        - "WDL TFR"
+
+        THEN direction MUST be "outflow",
+        regardless of any other text in the description.
 
         ========================
         INPUT STATEMENT TEXT
