@@ -39,6 +39,7 @@ import { token } from "morgan";
 import { callWithRateLimitRetry } from "../helper/api.retry";
 import SSEManager from "./sse.registery";
 import ErrorHandler from "../helper/error.handler";
+import logger from "../helper/logger";
 
 export default class ProcessorHelper extends ProcessorDB {
   protected llm: ProcessorLLM;
@@ -75,7 +76,7 @@ export default class ProcessorHelper extends ProcessorDB {
       narrativeEnabled: true,
     });
 
-    const limit = pLimit(10); // tune: 6–12 is safe
+    const limit = pLimit(2); // tune: 6–12 is safe
 
     const context = await callWithRateLimitRetry(() =>
       this.llm.detectStatementContext({
@@ -122,7 +123,11 @@ export default class ProcessorHelper extends ProcessorDB {
             }),
           );
 
+          logger.info(`Extracted ${txns.length} transactions from chunk`);
+
           txns = this.detectInternalTransfers({ transactions: txns });
+
+          logger.info(`After internal transfer detection: ${txns.length} transactions`);
 
           if (txns.length) {
             await this.insertBulkTransactions({ transactions: txns });

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { Transaction, ExtractTransactionsInput, AccountContext } from "./types/types";
 import { randomUUID } from "node:crypto";
+import logger from "../helper/logger";
 
 export default class ProcessorLLM {
   private readonly client: OpenAI;
@@ -421,6 +422,8 @@ INPUT STATEMENT TEXT
 ${input.pageText}
 `;
 
+
+  logger.info("Sending transaction extraction prompt to OpenAI");
   const res = await this.client.chat.completions.create({
     model: "gpt-4.1-mini",
     // model: "gpt-4.1",
@@ -428,6 +431,8 @@ ${input.pageText}
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_object" }
   });
+
+  logger.info("Received response from OpenAI for transaction extraction");
 
   const parsed = JSON.parse(res.choices[0].message.content!);
 
