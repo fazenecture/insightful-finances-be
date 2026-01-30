@@ -105,10 +105,20 @@ export default class ProcessorLLM {
         INTERNAL TRANSFER DETECTION (ABSOLUTE PRIORITY):
         ========================
 
+        COUNTERPARTY EXTRACTION SCOPE (CRITICAL):
+        The counterparty name MUST be extracted ONLY from the transaction line itself.
+        IGNORE header, account holder details, address blocks, and statement metadata.
+
+        If the HolderName appears ONLY in the statement header
+        and NOT within the transaction description line,
+        it MUST NOT be considered a counterparty match.
+
+
         Mark is_internal_transfer = true ONLY if BOTH conditions are satisfied:
 
         1. Counterparty name matches HolderName
-          (partial match allowed, case-insensitive, ignoring spacing)
+            ONLY IF the match occurs within the transaction description line
+            after the transfer marker (e.g., NEFT*, IMPS/, UPI/).
 
         AND
 
@@ -131,6 +141,14 @@ export default class ProcessorLLM {
         - "TECH", "TECHNOLOGIES", "SYSTEMS", "SOLUTIONS"
         - "INDIA", "SERVICES", "ENTERPRISES"
         - Any pluralized or brand-style name
+
+        CREDIT BUSINESS BLOCKER (ABSOLUTE):
+
+        If direction = "inflow"
+        AND description indicates NEFT / IMPS credit
+        AND counterparty appears to be a business or organization,
+        THEN is_internal_transfer MUST be false.
+
 
         NEGATIVE OVERRIDE (ABSOLUTE):
 
@@ -412,10 +430,6 @@ export default class ProcessorLLM {
 
     // create a local file to log the prompt for debugging
     console.log('prompt: ', prompt);
-    fs.writeFileSync(
-      `prompt_${input.userId}_${input.accountId}_${randomUUID()}.txt`,
-      prompt
-    );
 
     logger.info("Sending transaction extraction prompt to OpenAI");
     const res = await this.client.chat.completions.create({
