@@ -103,6 +103,17 @@ export default class ProcessorDB {
     return rows;
   };
 
+  public fetchTransactionsBySessionId = async (input: {
+    userId: number;
+    sessionId: string;
+  }): Promise<Transaction[]> => {
+    const { rows } = await db.query(
+      `SELECT * FROM transactions WHERE user_id = $1 AND session_id = $2 ORDER BY date`,
+      [input.userId, input.sessionId],
+    );
+    return rows;
+  };
+
   /* ================================
      ANALYTICS STORAGE
      ================================ */
@@ -164,13 +175,14 @@ export default class ProcessorDB {
     userId: number;
     narrative: string;
     sessionId: string;
+    analysisSnapshot?: any;
   }): Promise<void> => {
     await db.query(
       `
-      INSERT INTO financial_narratives (user_id, narrative, session_id)
-      VALUES ($1,$2,$3)
+      INSERT INTO financial_narratives (user_id, narrative, session_id, analysis_snapshot)
+      VALUES ($1,$2,$3,$4)
       `,
-      [input.userId, input.narrative, input.sessionId],
+      [input.userId, input.narrative, input.sessionId, input.analysisSnapshot],
     );
   };
 

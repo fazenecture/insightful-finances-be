@@ -1,5 +1,9 @@
 import OpenAI from "openai";
-import { Transaction, ExtractTransactionsInput, AccountContext } from "./types/types";
+import {
+  Transaction,
+  ExtractTransactionsInput,
+  AccountContext,
+} from "./types/types";
 import { randomUUID } from "node:crypto";
 import logger from "../helper/logger";
 
@@ -15,16 +19,14 @@ export default class ProcessorLLM {
   /* ================================
      TRANSACTION EXTRACTION
      ================================ */
-public extractAndEnrichTransactions = async (input: {
-  userId: number;
-  accountId: string;
-  pageText: string;
-  accountContext: AccountContext;
-  sessionId: string;
-}): Promise<Transaction[]> => {
-
-
-      const prompt = `
+  public extractAndEnrichTransactions = async (input: {
+    userId: number;
+    accountId: string;
+    pageText: string;
+    accountContext: AccountContext;
+    sessionId: string;
+  }): Promise<Transaction[]> => {
+    const prompt = `
         You are a deterministic financial transaction extraction engine for Indian bank and credit card statements.
 
         Your PRIMARY responsibility is to accurately extract factual transaction data.
@@ -388,53 +390,50 @@ public extractAndEnrichTransactions = async (input: {
         ${input.pageText}
         `;
 
+    logger.info("Sending transaction extraction prompt to OpenAI");
+    const res = await this.client.chat.completions.create({
+      model: "gpt-4.1-mini",
+      // model: "gpt-4.1",
+      temperature: 0,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
 
-  logger.info("Sending transaction extraction prompt to OpenAI");
-  const res = await this.client.chat.completions.create({
-    model: "gpt-4.1-mini",
-    // model: "gpt-4.1",
-    temperature: 0,
-    messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" }
-  });
+    logger.info("Received response from OpenAI for transaction extraction");
 
-  logger.info("Received response from OpenAI for transaction extraction");
+    const parsed = JSON.parse(res.choices[0].message.content!);
 
-  const parsed = JSON.parse(res.choices[0].message.content!);
+    return parsed.transactions.map((t: any) => ({
+      transaction_id: randomUUID(),
+      user_id: input.userId,
+      account_id: input.accountId,
 
-  return parsed.transactions.map((t: any) => ({
-    transaction_id: randomUUID(),
-    user_id: input.userId,
-    account_id: input.accountId,
+      date: t.date,
+      amount: t.amount,
+      direction: t.direction,
+      description: t.description,
+      merchant: t.merchant,
 
-    date: t.date,
-    amount: t.amount,
-    direction: t.direction,
-    description: t.description,
-    merchant: t.merchant,
+      source: t.source,
+      category: t.category,
+      subcategory: t.subcategory,
 
-    source: t.source,
-    category: t.category,
-    subcategory: t.subcategory,
+      is_internal_transfer: t.is_internal_transfer,
+      currency: "INR",
+      session_id: input.sessionId,
 
-    is_internal_transfer: t.is_internal_transfer,
-    currency: "INR",
-    session_id: input.sessionId,
+      // optional but VERY useful
+      confidence: t.confidence,
 
-    // optional but VERY useful
-    confidence: t.confidence,
-
-    is_recurring_candidate: t.is_recurring_candidate,
-    recurring_signal: t.recurring_signal,
-  }));
-};
-
+      is_recurring_candidate: t.is_recurring_candidate,
+      recurring_signal: t.recurring_signal,
+    }));
+  };
 
   public detectStatementContext = async (input: {
-  firstPageText: string;
-}): Promise<AccountContext> => {
-
-  const prompt = `
+    firstPageText: string;
+  }): Promise<AccountContext> => {
+    const prompt = `
 You are a deterministic Indian bank statement classifier.
 
 Your task is to extract ACCOUNT CONTEXT from the FIRST PAGE of a statement.
@@ -490,44 +489,45 @@ STATEMENT FIRST PAGE TEXT
 ${input.firstPageText}
 `;
 
-  const res = await this.client.chat.completions.create({
-    model: "gpt-4.1",
-    temperature: 0,
-    messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" }
-  });
+    const res = await this.client.chat.completions.create({
+      model: "gpt-4.1",
+      temperature: 0,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
 
-  const parsed = JSON.parse(res.choices[0].message.content!);
-  return parsed;
-}
-
+    const parsed = JSON.parse(res.choices[0].message.content!);
+    return parsed;
+  };
 
   /* ================================
      NARRATIVE (READ-ONLY)
      ================================ */
 
-public generateNarrative = async (input: {
-  userId: number;
-  snapshot: any;
-}): Promise<string> => {
+  public generateNarrative = async (input: {
+    userId: number;
+    snapshot: any;
+  }): Promise<string> => {
+    const prompt = `
+      You are a deterministic financial report structuring engine
+      for an Indian personal finance application.
 
-  const prompt = `
-        You are a deterministic financial analysis engine for an Indian personal finance application.
+      You are given a PRECOMPUTED FINANCIAL SNAPSHOT.
+      Your job is to STRUCTURE this snapshot into a
+      LOSSLESS, UI-READY REPORT FORMAT.
 
-      You are given a PRECOMPUTED financial analysis SNAPSHOT.
-      Your task is to STRUCTURE and INTERPRET this snapshot into a UI-ready insight report.
-
-      You must be precise, conservative, and strictly rule-driven.
+      You MUST preserve all factual data.
+      You MAY summarize or interpret ONLY where explicitly allowed.
 
       ========================
-      CRITICAL CONSTRAINTS (NON-NEGOTIABLE)
+      ABSOLUTE CONSTRAINTS
       ========================
-      - DO NOT recompute numbers
+      - DO NOT recompute numbers unless explicitly permitted
       - DO NOT infer missing data
-      - DO NOT introduce new metrics
-      - DO NOT contradict the snapshot
-      - DO NOT fabricate trends or causes
-      - DO NOT include explanations or prose outside JSON
+      - DO NOT fabricate entities, subscriptions, patterns, or causes
+      - DO NOT drop data present in the snapshot
+      - DO NOT add new metrics
+      - DO NOT contradict snapshot values
       - RETURN ONLY valid JSON
       - Output MUST EXACTLY match the schema below
 
@@ -543,37 +543,62 @@ public generateNarrative = async (input: {
             "month": "MMM YYYY",
             "income": number,
             "expenses": number,
-            "savings": number,
-            "savingsRate": number
+            "net": number
           }
         ],
 
-        "category_breakdown": [
+        "expense_categories": [
           {
             "category": string,
             "amount": number,
             "percentage": number,
-            "trend": "up" | "down" | "stable",
-            "count": number
+            "rank": number
           }
         ],
 
-        "subscriptions": [
+        "top_expense_categories": [
           {
-            "merchant": string,
-            "frequency": "weekly" | "monthly" | "annual",
-            "average_amount": number,
-            "is_active": boolean,
-            "confidence": number,
-            "occurrences": number,
-            "first_seen": "YYYY-MM-DD"
+            "category": string,
+            "amount": number,
+            "percentage": number,
+            "rank": number
           }
         ],
+
+        "income_sources": [
+          {
+            "source": string,
+            "amount": number,
+            "rank": number
+          }
+        ],
+
+        "top_income_sources": [
+          {
+            "source": string,
+            "amount": number,
+            "rank": number
+          }
+        ],
+
+        "subscriptions": {
+          "present": boolean,
+          "items": [
+            {
+              "merchant": string,
+              "frequency": string | null,
+              "average_amount": number | null,
+              "occurrences": number | null,
+              "confidence": number | null,
+              "first_seen": "YYYY-MM-DD" | null
+            }
+          ]
+        },
 
         "patterns": [
           {
             "pattern": string,
-            "description": string,
+            "basis": string,
             "impact": "positive" | "negative" | "neutral"
           }
         ],
@@ -581,16 +606,17 @@ public generateNarrative = async (input: {
         "recommendations": [
           {
             "title": string,
-            "impact": string,
+            "reason": string,
             "confidence": "low" | "medium" | "high"
           }
         ],
 
-        "goal_alignment_score": number,
-
-        "total_income": number,
-        "total_expenses": number,
-        "net_savings": number,
+        "totals": {
+          "total_income": number,
+          "total_expenses": number,
+          "net_savings": number,
+          "savings_rate": number
+        },
 
         "analysis_period": {
           "start": "YYYY-MM-DD",
@@ -599,93 +625,76 @@ public generateNarrative = async (input: {
       }
 
       ========================
-      HOW TO INTERPRET SNAPSHOT DATA
+      HOW TO BUILD EACH SECTION
       ========================
 
       SUMMARY:
-      - Provide 4–6 concise, insight-driven bullet points
-      - Reference ONLY values and patterns present in the snapshot
-      - May reference subscriptions if present
-      - Avoid generic financial advice
+      - 4–6 concise bullets
+      - MUST reference exact snapshot values
+      - MUST avoid causal claims
+      - MAY reference ordering (largest, highest, majority)
 
       MONTHLY BREAKDOWN:
-      - Use cashflow.months
-      - savings = income − expenses (already provided or directly derivable)
-      - savingsRate = savings / income * 100
-      - Format month as "MMM YYYY"
+      - Use cashflow.months ONLY
+      - net = income - expenses (ALLOWED derivation)
+      - DO NOT compute savingsRate here
 
-      CATEGORY BREAKDOWN:
-      - Use dominant expense categories only
+      EXPENSE CATEGORIES (LOSSLESS):
+      - Include ALL categories from snapshot.categories
       - percentage = percentageOfExpense * 100
-      - trend:
-        - "up" if spending increases across months
-        - "down" if decreases
-        - "stable" otherwise
-      - count = number of transactions (estimate conservatively)
+      - rank by amount (descending)
+      - Rank starts at 1
 
-      ========================
-      SUBSCRIPTIONS (FACTUAL, READ-ONLY)
-      ========================
+      TOP EXPENSE CATEGORIES:
+      - Take top 5 ranked expense_categories
+      - MUST be a subset, never recomputed
 
-      If snapshot includes a "subscriptions" array:
+      INCOME SOURCES (LOSSLESS):
+      - Use income.sources exactly
+      - Rank by amount descending
+      - Preserve naming as-is
 
-      - Populate the subscriptions section directly from snapshot data
-      - DO NOT modify, aggregate, annualize, or recompute subscription values
-      - Preserve merchant naming as-is
-      - Include both active and inactive subscriptions
-      - Order subscriptions by is_active (true first), then by confidence descending
+      TOP INCOME SOURCES:
+      - Take top 5 ranked income_sources
 
-      ========================
-      PATTERNS
-      ========================
+      SUBSCRIPTIONS (STRICT):
+      - If snapshot includes subscriptions array:
+          - present = true
+          - items = snapshot.subscriptions (verbatim)
+      - If snapshot does NOT include subscriptions:
+          - present = false
+          - items = []
+      - NEVER infer subscriptions from categories
+      - NEVER classify food merchants as subscriptions
 
-      - Detect observable behavioral patterns ONLY from snapshot data
-      - Patterns MAY reference subscriptions, but MUST NOT recompute costs
+      PATTERNS:
+      - Patterns MUST be directly observable
+      - Allowed examples:
+        - "High expense concentration in Uncategorized"
+        - "More negative cashflow months than positive"
+        - "Single income source dominance"
+      - basis MUST cite snapshot field names
+      - NO inferred causes
 
-      Allowed subscription-related patterns:
-      - High number of active subscriptions
-      - Low-usage active subscriptions (low occurrences)
-      - High average_amount subscriptions
-      - Subscription redundancy or clustering
+      RECOMMENDATIONS:
+      - Each recommendation MUST map to a pattern
+      - Must be phrased as review / awareness actions
+      - NO prescriptive financial advice
 
-      Impact rules:
-      - "negative" → recurring cost inefficiency
-      - "neutral" → informational patterns
-      - "positive" → only if explicitly supported by snapshot health indicators
+      TOTALS:
+      - Use snapshot.core values ONLY
 
-      ========================
-      RECOMMENDATIONS
-      ========================
-
-      - Must directly correspond to detected patterns
-      - Must be realistic and actionable
-      - Subscription recommendations must reference:
-        - low usage
-        - high cost
-        - redundancy
-      - Avoid generic advice like “cancel unused subscriptions”
-
-      ========================
-      GOAL ALIGNMENT SCORE
-      ========================
-
-      - Use snapshot.healthScore normalized to a 0–1 scale
-
-      ========================
-      ANALYSIS PERIOD
-      ========================
-
-      - Use earliest and latest months from cashflow.months
+      ANALYSIS PERIOD:
+      - Use earliest and latest month dates from cashflow.months
+      - Do NOT guess month boundaries
 
       ========================
       FINAL VALIDATION RULES
       ========================
-
-      - All numeric values MUST come from snapshot
-      - No empty arrays unless snapshot truly lacks data
-      - Output MUST be valid JSON
-      - No trailing commas
-      - No commentary outside the schema
+      - No empty arrays unless explicitly allowed
+      - No fabricated merchants or subscriptions
+      - No inferred frequencies or counts
+      - JSON must be syntactically valid
 
       ========================
       INPUT SNAPSHOT (READ-ONLY)
@@ -693,14 +702,13 @@ public generateNarrative = async (input: {
       ${JSON.stringify(input.snapshot, null, 2)}
       `;
 
+    const res = await this.client.chat.completions.create({
+      model: "gpt-4.1",
+      temperature: 0.25,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "text" },
+    });
 
-  const res = await this.client.chat.completions.create({
-    model: "gpt-4.1",
-    temperature: 0.25,
-    messages: [{ role: "user", content: prompt }],
-    response_format: { type: "text" }
-  });
-
-  return res.choices[0].message.content!;
-};
+    return res.choices[0].message.content!;
+  };
 }

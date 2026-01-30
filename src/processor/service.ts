@@ -161,8 +161,9 @@ export default class ProcessorService extends ProcessorHelper {
 
     // 2. Fetch canonical ledger (all transactions)
     const analysisStart = this.now();
-    const allTransactions = await this.fetchTransactionsByUser({
+    const allTransactions = await this.fetchTransactionsBySessionId({
       userId,
+      sessionId: input?.sessionId,
     });
 
     this.sseManager.emit(input?.sessionId, SSEEventType.PROGRESS, {

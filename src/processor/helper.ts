@@ -318,6 +318,7 @@ export default class ProcessorHelper extends ProcessorDB {
     credit: any;
     income: any;
     anomalies: any;
+    expense: any;
     healthScore: number;
     subscriptions: IDetectedSubscription[];
   } => {
@@ -326,6 +327,7 @@ export default class ProcessorHelper extends ProcessorDB {
     const categories = this.analysis.computeCategoryAnalysis({ transactions });
     const credit = this.analysis.computeCreditCardAnalysis({ transactions });
     const income = this.analysis.computeIncomeSourceAnalysis({ transactions });
+    const expense = this.analysis.computeExpendSourceAnalysis({ transactions });
     const anomalies = this.analysis.detectAnomalies({ transactions });
     const subscriptions = this.detectSubscriptions({ transactions });
 
@@ -340,6 +342,7 @@ export default class ProcessorHelper extends ProcessorDB {
       categories,
       credit,
       income,
+      expense,
       anomalies,
       healthScore,
       subscriptions,
@@ -355,7 +358,7 @@ export default class ProcessorHelper extends ProcessorDB {
   ): Promise<void> => {
     await this.saveMonthlyMetrics({
       userId: input.userId,
-      months: input.snapshot.cashflow.months,
+      months: input.snapshot.cashflow.months
     });
 
     await this.saveSubscriptions(input.snapshot.subscriptions);
@@ -487,6 +490,7 @@ export default class ProcessorHelper extends ProcessorDB {
       userId: input.userId,
       narrative,
       sessionId: input.sessionId,
+      analysisSnapshot: input.snapshot,
     });
   };
 

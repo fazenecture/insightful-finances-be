@@ -126,6 +126,32 @@ export default class FinancialAnalysisEngine {
     };
   };
 
+    /* ================================
+     EXPEND SOURCE ANALYSIS
+     ================================ */
+
+  public computeExpendSourceAnalysis = (input: {
+    transactions: Transaction[];
+  }) => {
+    const sources: Record<string, number> = {};
+
+    input.transactions
+      .filter((t) => t.direction === "outflow")
+      .forEach((t) => {
+        const key = t.merchant ?? "Unknown";
+        sources[key] = (sources[key] ?? 0) + Number.parseInt(t.amount.toString());
+      });
+
+    const values = Object.values(sources);
+    const total = values.reduce((a, b) => a + b, 0);
+
+    return {
+      sources,
+      dependenceOnSingleSource: Math.max(...values) / (total || 1),
+      expenseVolatility: this.stdDev(values),
+    };
+  }
+
   /* ================================
      ANOMALY DETECTION
      ================================ */

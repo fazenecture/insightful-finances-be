@@ -56,6 +56,7 @@ export type ExtractTransactionsInput = {
 export type PersistAnalysisInput = {
   userId: number;
   snapshot: any;
+  sessionId: string;
 };
 
 export type GenerateNarrativeInput = {
