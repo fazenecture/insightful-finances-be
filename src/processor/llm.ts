@@ -6,6 +6,7 @@ import {
 } from "./types/types";
 import { randomUUID } from "node:crypto";
 import logger from "../helper/logger";
+import fs from "fs";
 
 export default class ProcessorLLM {
   private readonly client: OpenAI;
@@ -101,23 +102,35 @@ export default class ProcessorLLM {
         - investment
 
         ========================
-        INTERNAL TRANSFER DETECTION (ABSOLUTE PRIORITY)
+        INTERNAL TRANSFER DETECTION (ABSOLUTE PRIORITY):
         ========================
 
-        Mark is_internal_transfer = true ONLY if ownership on BOTH sides is explicit.
+        Mark is_internal_transfer = true ONLY if BOTH conditions are satisfied:
 
-        Explicit internal transfer indicators (ALL CONDITIONS MUST HOLD):
+        1. Counterparty name matches HolderName
+          (partial match allowed, case-insensitive, ignoring spacing)
 
-        A transaction may be marked as is_internal_transfer = true ONLY if:
-        - Transfer method is RTGS / NEFT / IMPS
         AND
-        - Counterparty name matches HolderName (partial, case-insensitive)
-        OR
-        - Explicit self-transfer phrases are present:
+
+        2. Description contains explicit self-transfer intent keywords:
           - "SELF"
           - "OWN ACCOUNT"
           - "TRANSFER TO ANOTHER ACCOUNT"
           - "MOVING FUNDS"
+
+        Transfer methods such as NEFT, IMPS, RTGS, or UPI
+        are NEUTRAL and MUST NOT be used as evidence of internal transfer.
+
+        ABSOLUTE BLOCKERS (NON-OVERRIDABLE):
+
+        If counterparty name appears to be a business, company, or organization,
+        THEN is_internal_transfer MUST be false.
+
+        Business indicators include:
+        - "PVT", "PRIVATE", "LTD", "LIMITED", "LLP"
+        - "TECH", "TECHNOLOGIES", "SYSTEMS", "SOLUTIONS"
+        - "INDIA", "SERVICES", "ENTERPRISES"
+        - Any pluralized or brand-style name
 
         NEGATIVE OVERRIDE (ABSOLUTE):
 
@@ -125,11 +138,6 @@ export default class ProcessorLLM {
         (e.g., contains words like "TECHNOLOGIES", "PRIVATE", "LIMITED", "LTD", "LLP"),
         THEN is_internal_transfer MUST be false,
         even if transfer method is NEFT / IMPS / RTGS.
-
-
-        ACCOUNT HOLDER MATCH RULE (STRICT):
-        If counterparty name matches HolderName (ignoring case and spacing)
-        → is_internal_transfer = true
 
         If is_internal_transfer = true:
         - direction MUST follow statement sign ONLY
@@ -401,6 +409,9 @@ export default class ProcessorLLM {
         ========================
         ${input.pageText}
         `;
+
+    fs.writeFileSync('./logs/llm-transaction-prompt.txt', prompt);
+    console.log('prompt: ', prompt);
 
     logger.info("Sending transaction extraction prompt to OpenAI");
     const res = await this.client.chat.completions.create({
