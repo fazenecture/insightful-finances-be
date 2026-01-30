@@ -94,12 +94,14 @@ export default class ProcessorLLM {
         - savings → own account
         - bank → own wallet
         - explicit self transfer
+        - account to another account in user's name
 
         Internal transfers are NEVER:
         - income
         - expense
         - salary
         - investment
+        - merchant payments
 
         ========================
         INTERNAL TRANSFER DETECTION (ABSOLUTE PRIORITY):
@@ -129,7 +131,7 @@ export default class ProcessorLLM {
           - "MOVING FUNDS"
 
         Transfer methods such as NEFT, IMPS, RTGS, or UPI
-        are NEUTRAL and MUST NOT be used as evidence of internal transfer.
+        are NEUTRAL and MUST NOT be used as the ONLY evidence of internal transfer.
 
         ABSOLUTE BLOCKERS (NON-OVERRIDABLE):
 
