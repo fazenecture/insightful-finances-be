@@ -150,13 +150,6 @@ export default class ProcessorLLM {
         THEN is_internal_transfer MUST be false.
 
 
-        NEGATIVE OVERRIDE (ABSOLUTE):
-
-        If counterparty name appears to be a business, company, or organization
-        (e.g., contains words like "TECHNOLOGIES", "PRIVATE", "LIMITED", "LTD", "LLP"),
-        THEN is_internal_transfer MUST be false,
-        even if transfer method is NEFT / IMPS / RTGS.
-
         If is_internal_transfer = true:
         - direction MUST follow statement sign ONLY
         - category = "personal_transfer"
@@ -283,6 +276,10 @@ export default class ProcessorLLM {
         - groceries
         - shopping
         - transport
+        - rent
+        - income
+        - investment
+        - personal_care
         - fuel
         - travel
         - healthcare
@@ -292,6 +289,8 @@ export default class ProcessorLLM {
         - financial_services
         - personal_transfer
         - accommodation
+        - subscriptions
+        - donations
         - education
         - others
 
@@ -333,7 +332,6 @@ export default class ProcessorLLM {
         - Does NOT contain a phone number
         - Appears as a brand, shop, service, or business name
 
-
         ========================
         MERCHANT-BASED CATEGORIZATION
         ========================
@@ -344,16 +342,22 @@ export default class ProcessorLLM {
         - Swiggy
         - Zomato
         - McDonalds
+        - Dominos
+        - Pizza Hut
+        - Haldiram
         - Cafes, restaurants, bars
 
         GROCERIES:
         - Blinkit
         - Zepto
         - BigBasket
+        - JioMart
         - Instamart
 
         SHOPPING:
         - Amazon (non-flight, non-digital)
+        - Flipkart
+        - Meesho
         - Myntra
         - Nykaa
         - Ajio
