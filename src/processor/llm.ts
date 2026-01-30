@@ -107,6 +107,31 @@ export default class ProcessorLLM {
         INTERNAL TRANSFER DETECTION (ABSOLUTE PRIORITY):
         ========================
 
+        INDIAN BANK SELF-TRANSFER OVERRIDE (STRICT):
+
+        If ALL of the following are true:
+
+        1. Transaction method is IMPS or NEFT
+        2. Counterparty name matches HolderName
+          (partial match, case-insensitive)
+        3. Counterparty bank code differs from source bank
+          (e.g., HDFC-, UTIB-, ICIC-)
+        4. Description contains ONE of:
+          - "Deposit"
+          - "Bill Pay"
+
+        AND
+        - Counterparty is NOT a business
+        - Counterparty is NOT a merchant
+        - Transaction is NOT marked as merchant payment
+
+        THEN:
+        - is_internal_transfer = true
+        - category = "personal_transfer"
+        - subcategory = "self_transfer"
+        - confidence = 0.95
+
+
         COUNTERPARTY EXTRACTION SCOPE (CRITICAL):
         The counterparty name MUST be extracted ONLY from the transaction line itself.
         IGNORE header, account holder details, address blocks, and statement metadata.
