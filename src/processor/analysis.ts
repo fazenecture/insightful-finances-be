@@ -7,10 +7,7 @@ export default class FinancialAnalysisEngine {
      ================================ */
 
   public computeCoreMetrics = (input: { transactions: Transaction[] }) => {
-    const txns = input.transactions.filter(
-      (t) =>
-        !t.is_internal_transfer && !t.subcategory?.includes("self_transfer"),
-    );
+    const txns = input.transactions.filter((t) => !t.is_internal_transfer);
 
     const income = this.sum(txns, "inflow");
     const expenses = this.sum(txns, "outflow");

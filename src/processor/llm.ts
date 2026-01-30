@@ -106,14 +106,26 @@ export default class ProcessorLLM {
 
         Mark is_internal_transfer = true ONLY if ownership on BOTH sides is explicit.
 
-        Explicit indicators:
-        - RTGS / NEFT / IMPS
+        Explicit internal transfer indicators (ALL CONDITIONS MUST HOLD):
+
+        A transaction may be marked as is_internal_transfer = true ONLY if:
+        - Transfer method is RTGS / NEFT / IMPS
+        AND
         - Counterparty name matches HolderName (partial, case-insensitive)
-        - Phrases:
+        OR
+        - Explicit self-transfer phrases are present:
           - "SELF"
           - "OWN ACCOUNT"
           - "TRANSFER TO ANOTHER ACCOUNT"
           - "MOVING FUNDS"
+
+        NEGATIVE OVERRIDE (ABSOLUTE):
+
+        If counterparty name appears to be a business, company, or organization
+        (e.g., contains words like "TECHNOLOGIES", "PRIVATE", "LIMITED", "LTD", "LLP"),
+        THEN is_internal_transfer MUST be false,
+        even if transfer method is NEFT / IMPS / RTGS.
+
 
         ACCOUNT HOLDER MATCH RULE (STRICT):
         If counterparty name matches HolderName (ignoring case and spacing)
