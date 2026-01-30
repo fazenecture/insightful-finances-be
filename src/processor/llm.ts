@@ -422,7 +422,7 @@ ${input.pageText}
 `;
 
   const res = await this.client.chat.completions.create({
-    model: "gpt-4.1",
+    model: "gpt-4.1-mini",
     // model: "gpt-4.1",
     temperature: 0,
     messages: [{ role: "user", content: prompt }],
