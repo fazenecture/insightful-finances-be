@@ -63,6 +63,7 @@ export default class ProcessorHelper extends ProcessorDB {
     input: ProcessSinglePdfInput,
   ): Promise<any> => {
     const { userId, s3Key } = input;
+    logger.info(`Starting processing for PDF: ${s3Key}`);
     const pages = await this.extractPdfFromUrl({ url: s3Key });
     /**
      * get the context from the first page
@@ -76,7 +77,7 @@ export default class ProcessorHelper extends ProcessorDB {
       narrativeEnabled: true,
     });
 
-    const limit = pLimit(2); // tune: 6–12 is safe
+    // const limit = pLimit(2); // tune: 6–12 is safe
 
     const context = await callWithRateLimitRetry(() =>
       this.llm.detectStatementContext({
@@ -104,38 +105,67 @@ export default class ProcessorHelper extends ProcessorDB {
       context?.accountLast4 ?? context?.cardLast4 ?? "XXXX",
     ].join("-");
 
-    await Promise.all(
-      chunks.map((chunk, index) =>
-        limit(async () => {
-          console.log(
-            `Processing chunk ${index + 1}/${
-              chunks.length
-            } (pages: ${chunk.pages.join(",")})`,
-          );
+    // await Promise.all(
+    //   chunks.map((chunk, index) =>
+    //     limit(async () => {
+    //       console.log(
+    //         `Processing chunk ${index + 1}/${
+    //           chunks.length
+    //         } (pages: ${chunk.pages.join(",")})`,
+    //       );
 
-          let txns = await callWithRateLimitRetry(() =>
-            this.llm.extractAndEnrichTransactions({
-              userId,
-              accountId: accountIdData,
-              pageText: chunk.text,
-              accountContext: context,
-              sessionId: input?.sessionId,
-            }),
-          );
+    //       let txns = await callWithRateLimitRetry(() =>
+    //         this.llm.extractAndEnrichTransactions({
+    //           userId,
+    //           accountId: accountIdData,
+    //           pageText: chunk.text,
+    //           accountContext: context,
+    //           sessionId: input?.sessionId,
+    //         }),
+    //       );
 
-          logger.info(`Extracted ${txns.length} transactions from chunk`);
+    //       logger.info(`Extracted ${txns.length} transactions from chunk`);
 
-          txns = this.detectInternalTransfers({ transactions: txns });
+    //       txns = this.detectInternalTransfers({ transactions: txns });
 
-          logger.info(`After internal transfer detection: ${txns.length} transactions`);
+    //       logger.info(`After internal transfer detection: ${txns.length} transactions`);
 
-          if (txns.length) {
-            await this.insertBulkTransactions({ transactions: txns });
-          }
+    //       if (txns.length) {
+    //         await this.insertBulkTransactions({ transactions: txns });
+    //       }
+    //     }),
+    //   ),
+    // );
+
+    for (let index = 0; index < chunks.length; index++) {
+      const chunk = chunks[index];
+
+      console.log(
+        `Processing chunk ${index + 1}/${chunks.length} (pages: ${chunk.pages.join(
+          ",",
+        )})`,
+      );
+
+      let txns = await callWithRateLimitRetry(() =>
+        this.llm.extractAndEnrichTransactions({
+          userId,
+          accountId: accountIdData,
+          pageText: chunk.text,
+          accountContext: context,
+          sessionId: input?.sessionId,
         }),
-      ),
-    );
+      );
 
+      txns = this.detectInternalTransfers({ transactions: txns });
+
+      if (txns.length) {
+        await this.insertBulkTransactions({ transactions: txns });
+      }
+    }
+
+    logger.info(
+      `Completed processing for PDF: ${s3Key}, total pages: ${pages.length}, total chunks: ${chunks.length}`,
+    );
     return {
       token_used: tokenData,
       page_count: pages.length,
