@@ -411,11 +411,11 @@ export default class ProcessorLLM {
         `;
 
     // create a local file to log the prompt for debugging
+    console.log('prompt: ', prompt);
     fs.writeFileSync(
       `prompt_${input.userId}_${input.accountId}_${randomUUID()}.txt`,
       prompt
     );
-    console.log('prompt: ', prompt);
 
     logger.info("Sending transaction extraction prompt to OpenAI");
     const res = await this.client.chat.completions.create({
