@@ -410,7 +410,11 @@ export default class ProcessorLLM {
         ${input.pageText}
         `;
 
-    fs.writeFileSync('./logs/llm-transaction-prompt.txt', prompt);
+    // create a local file to log the prompt for debugging
+    fs.writeFileSync(
+      `prompt_${input.userId}_${input.accountId}_${randomUUID()}.txt`,
+      prompt
+    );
     console.log('prompt: ', prompt);
 
     logger.info("Sending transaction extraction prompt to OpenAI");
