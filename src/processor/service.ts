@@ -185,6 +185,7 @@ export default class ProcessorService extends ProcessorHelper {
     await this.persistAnalysisSnapshot({
       userId,
       snapshot: analysisSnapshot,
+      sessionId: input?.sessionId!,
     });
 
     dbWriteMs += this.ms(dbStart, this.now());
