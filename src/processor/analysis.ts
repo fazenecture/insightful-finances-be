@@ -7,7 +7,7 @@ export default class FinancialAnalysisEngine {
      ================================ */
 
   public computeCoreMetrics = (input: { transactions: Transaction[] }) => {
-    const txns = input.transactions.filter((t) => !t.is_internal_transfer);
+    const txns = input.transactions.filter((t) => !t.is_internal_transfer && t.subcategory === 'self_transfer');
 
     const income = this.sum(txns, "inflow");
     const expenses = this.sum(txns, "outflow");
@@ -188,8 +188,18 @@ export default class FinancialAnalysisEngine {
      PRIVATE HELPERS
      ================================ */
 
-  private readonly sum = (txns: Transaction[], dir: "inflow" | "outflow") =>
-    txns.filter((t) => t.direction === dir).reduce((s, t) => s + Number.parseInt(t.amount.toString()), 0);
+private readonly sum = (
+  txns: Transaction[],
+  dir: "inflow" | "outflow"
+): number => {
+  return txns
+    .filter(t => t.direction === dir)
+    .reduce((total, t) => {
+      const amount = Number(t.amount); // 👈 FIX (no parseInt)
+      return total + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+};
+
 
 private readonly groupMonthly = (
   txns: Transaction[],
