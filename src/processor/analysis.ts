@@ -7,7 +7,10 @@ export default class FinancialAnalysisEngine {
      ================================ */
 
   public computeCoreMetrics = (input: { transactions: Transaction[] }) => {
-    const txns = input.transactions.filter((t) => !t.is_internal_transfer && t.subcategory === 'self_transfer');
+    const txns = input.transactions.filter(
+      (t) =>
+        !t.is_internal_transfer && !t.subcategory?.includes("self_transfer"),
+    );
 
     const income = this.sum(txns, "inflow");
     const expenses = this.sum(txns, "outflow");
@@ -65,7 +68,8 @@ export default class FinancialAnalysisEngine {
     input.transactions.forEach((t) => {
       if (t.direction !== "outflow" || t.is_internal_transfer) return;
       totals[t.category ?? "Uncategorized"] =
-        (totals[t.category ?? "Uncategorized"] ?? 0) + Number.parseInt(t.amount.toString());
+        (totals[t.category ?? "Uncategorized"] ?? 0) +
+        Number.parseInt(t.amount.toString());
     });
 
     const totalExpense = Object.values(totals).reduce((a, b) => a + b, 0);
@@ -95,7 +99,9 @@ export default class FinancialAnalysisEngine {
       interestPaid: cc
         .filter((t) => t.is_interest)
         .reduce((s, t) => s + Number.parseInt(t.amount.toString()), 0),
-      feesPaid: cc.filter((t) => t.is_fee).reduce((s, t) => s + Number.parseInt(t.amount.toString()), 0),
+      feesPaid: cc
+        .filter((t) => t.is_fee)
+        .reduce((s, t) => s + Number.parseInt(t.amount.toString()), 0),
       revolvingDetected: spend > payments * 1.2,
     };
   };
@@ -113,7 +119,8 @@ export default class FinancialAnalysisEngine {
       .filter((t) => t.direction === "inflow")
       .forEach((t) => {
         const key = t.merchant ?? "Unknown";
-        sources[key] = (sources[key] ?? 0) + Number.parseInt(t.amount.toString());
+        sources[key] =
+          (sources[key] ?? 0) + Number.parseInt(t.amount.toString());
       });
 
     const values = Object.values(sources);
@@ -126,7 +133,7 @@ export default class FinancialAnalysisEngine {
     };
   };
 
-    /* ================================
+  /* ================================
      EXPEND SOURCE ANALYSIS
      ================================ */
 
@@ -139,7 +146,8 @@ export default class FinancialAnalysisEngine {
       .filter((t) => t.direction === "outflow")
       .forEach((t) => {
         const key = t.merchant ?? "Unknown";
-        sources[key] = (sources[key] ?? 0) + Number.parseInt(t.amount.toString());
+        sources[key] =
+          (sources[key] ?? 0) + Number.parseInt(t.amount.toString());
       });
 
     const values = Object.values(sources);
@@ -150,7 +158,7 @@ export default class FinancialAnalysisEngine {
       dependenceOnSingleSource: Math.max(...values) / (total || 1),
       expenseVolatility: this.stdDev(values),
     };
-  }
+  };
 
   /* ================================
      ANOMALY DETECTION
@@ -158,12 +166,18 @@ export default class FinancialAnalysisEngine {
 
   public detectAnomalies = (input: { transactions: Transaction[] }) => {
     const expenses = input.transactions.filter(
-      (t) => t.direction === "outflow"
+      (t) => t.direction === "outflow",
     );
-    const mean = this.mean(expenses.map((t) => Number.parseInt(t.amount.toString())));
-    const std = this.stdDev(expenses.map((t) => Number.parseInt(t.amount.toString())));
+    const mean = this.mean(
+      expenses.map((t) => Number.parseInt(t.amount.toString())),
+    );
+    const std = this.stdDev(
+      expenses.map((t) => Number.parseInt(t.amount.toString())),
+    );
 
-    return expenses.filter((t) => Number.parseInt(t.amount.toString()) > mean + 3 * std);
+    return expenses.filter(
+      (t) => Number.parseInt(t.amount.toString()) > mean + 3 * std,
+    );
   };
 
   /* ================================
@@ -188,54 +202,51 @@ export default class FinancialAnalysisEngine {
      PRIVATE HELPERS
      ================================ */
 
-private readonly sum = (
-  txns: Transaction[],
-  dir: "inflow" | "outflow"
-): number => {
-  return txns
-    .filter(t => t.direction === dir)
-    .reduce((total, t) => {
-      const amount = Number(t.amount); // 👈 FIX (no parseInt)
-      return total + (Number.isFinite(amount) ? amount : 0);
-    }, 0);
-};
+  private readonly sum = (
+    txns: Transaction[],
+    dir: "inflow" | "outflow",
+  ): number => {
+    return txns
+      .filter((t) => t.direction === dir)
+      .reduce((total, t) => {
+        const amount = Number(t.amount); // 👈 FIX (no parseInt)
+        return total + (Number.isFinite(amount) ? amount : 0);
+      }, 0);
+  };
 
+  private readonly groupMonthly = (
+    txns: Transaction[],
+    dir: "inflow" | "outflow",
+  ): number[] => {
+    const map: Record<string, number> = {};
 
-private readonly groupMonthly = (
-  txns: Transaction[],
-  dir: "inflow" | "outflow"
-): number[] => {
-  const map: Record<string, number> = {};
+    for (const t of txns) {
+      if (t.direction !== dir) continue;
 
-  for (const t of txns) {
-    if (t.direction !== dir) continue;
+      const month = this.getYearMonth(t.date);
+      map[month] = (map[month] ?? 0) + Number.parseInt(t.amount.toString());
+    }
 
-    const month = this.getYearMonth(t.date);
-    map[month] = (map[month] ?? 0) + Number.parseInt(t.amount.toString());
-  }
+    return Object.values(map);
+  };
 
-  return Object.values(map);
-};
-
-
-private readonly countMonths = (txns: Transaction[]) =>
-  new Set(txns.map(t => this.getYearMonth(t.date))).size || 1;
+  private readonly countMonths = (txns: Transaction[]) =>
+    new Set(txns.map((t) => this.getYearMonth(t.date))).size || 1;
 
   private readonly getYearMonth = (date: string | Date): string => {
-  if (date instanceof Date) {
-    // Convert to YYYY-MM safely
-    return date.toISOString().slice(0, 7);
-  }
+    if (date instanceof Date) {
+      // Convert to YYYY-MM safely
+      return date.toISOString().slice(0, 7);
+    }
 
-  if (typeof date === "string") {
-    console.log('date: ', date);
-    return date.slice(0, 7);
-  }
-  
-  console.log('date: ', date);
-  throw new Error("Invalid date type in transaction");
-};
+    if (typeof date === "string") {
+      console.log("date: ", date);
+      return date.slice(0, 7);
+    }
 
+    console.log("date: ", date);
+    throw new Error("Invalid date type in transaction");
+  };
 
   private readonly mean = (vals: number[]) =>
     vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
@@ -243,7 +254,7 @@ private readonly countMonths = (txns: Transaction[]) =>
   private readonly stdDev = (vals: number[]) => {
     const m = this.mean(vals);
     return Math.sqrt(
-      vals.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (vals.length || 1)
+      vals.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (vals.length || 1),
     );
   };
 }
