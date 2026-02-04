@@ -37,7 +37,10 @@ export type MonthlyMetrics = {
 export type ProcessPdfBatchInput = {
   userId: number;
   sessionId: string;
-  pdfKeys: string[];
+  pdfKeys: {
+    url: string;
+    password?: string;
+  }[];
   tokensEstimate?: number;
 };
 
@@ -45,6 +48,7 @@ export type ProcessSinglePdfInput = {
   userId: number;
   s3Key: string;
   sessionId: string;
+  password?: string;
 };
 
 export type ExtractTransactionsInput = {

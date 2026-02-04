@@ -922,16 +922,27 @@ export default class ProcessorLLM {
         - JSON must be syntactically valid
 
         ========================
+        IMPORTANT OUTPUT RULES:
+        ========================
+
+        - Output MUST be valid, strict JSON.
+        - Do NOT include comments, explanations, placeholders, or ellipses.
+        - Do NOT use phrases like "omitted for brevity".
+        - ALL arrays must be fully expanded with real data.
+        - If an array is empty, return [].
+        - Never truncate lists.
+
+        ========================
         INPUT SNAPSHOT (READ-ONLY)
         ========================
         ${JSON.stringify(input.snapshot, null, 2)}
         `;
 
     const res = await this.client.chat.completions.create({
-      model: "gpt-4.1",
-      temperature: 0.25,
+      model: "gpt-4.1-mini",
+      temperature: 0,
       messages: [{ role: "user", content: prompt }],
-      response_format: { type: "text" },
+      response_format: { type: "json_object" },
     });
 
     return res.choices[0].message.content!;

@@ -62,9 +62,9 @@ export default class ProcessorHelper extends ProcessorDB {
   protected processSinglePdf = async (
     input: ProcessSinglePdfInput,
   ): Promise<any> => {
-    const { userId, s3Key } = input;
+    const { userId, s3Key, password } = input;
     logger.info(`Starting processing for PDF: ${s3Key}`);
-    const pages = await this.extractPdfFromUrl({ url: s3Key });
+    const pages = await this.extractPdfFromUrl({ url: s3Key, password });
     /**
      * get the context from the first page
      */
@@ -274,9 +274,11 @@ export default class ProcessorHelper extends ProcessorDB {
 
   protected extractPdfFromUrl = async (input: {
     url: string;
+    password?: string;
   }): Promise<any[]> => {
     const data = new PDFParse({
       url: input.url,
+      ...(input.password && { password: input.password }),
     });
 
     const result = await data.getText();

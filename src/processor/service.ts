@@ -146,11 +146,12 @@ export default class ProcessorService extends ProcessorHelper {
     const pdfStart = this.now();
 
     // 1. Process each PDF independently
-    for (const s3Key of pdfKeys) {
+    for (const { url, password } of pdfKeys) {
       const tokenData = await this.processSinglePdf({
         userId,
-        s3Key,
+        s3Key: url,
         sessionId: input?.sessionId,
+        password,
       });
 
       totalTokensUsed += tokenData.token_used.productTokensExpected;
@@ -284,8 +285,8 @@ export default class ProcessorService extends ProcessorHelper {
 
     let isBatch = pdfKeys.length > 1;
 
-    for (const s3Key of pdfKeys) {
-      const pages = await this.extractPdfFromUrl({ url: s3Key });
+    for (const { url, password } of pdfKeys) {
+      const pages = await this.extractPdfFromUrl({ url, password });
 
       // const tokenData = this.estimateTokensFromPdfSession({
       //   pages,
